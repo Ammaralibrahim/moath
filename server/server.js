@@ -11,37 +11,35 @@ require("dotenv").config();
 
 const app = express();
 
-// 1. CRITICAL: Handle OPTIONS preflight BEFORE CORS middleware
-app.options("*", (req, res) => {
-  res.header("Access-Control-Allow-Origin", "https://alsawaf.vercel.app");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, x-admin-key, Authorization, x-token");
-  res.header("Access-Control-Allow-Credentials", "true");
-  res.sendStatus(200);
-});
 
-// 2. CORS middleware
+// 1. First: Handle OPTIONS preflight requests for ALL routes
+app.options("*", cors());
+
+// 2. Configure CORS middleware with specific origin and credentials
 app.use(cors({
   origin: "https://alsawaf.vercel.app",
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "x-admin-key", "Authorization", "x-token"],
+  allowedHeaders: ["Content-Type", "x-admin-key", "Authorization", "x-token", "Accept"],
+  exposedHeaders: ["Content-Range", "X-Content-Range"],
+  maxAge: 86400, // 24 hours for preflight cache
 }));
 
-// 3. Add headers to all responses
+// 3. Set CORS headers manually for all responses
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "https://alsawaf.vercel.app");
   res.header("Access-Control-Allow-Credentials", "true");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, x-admin-key, Authorization, x-token");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD");
+  res.header("Access-Control-Allow-Headers", "Content-Type, x-admin-key, Authorization, x-token, Accept, Range");
   
-  // Handle preflight
+  // Handle preflight requests
   if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
+    res.header("Access-Control-Max-Age", "86400");
+    return res.status(200).end();
   }
+  
   next();
 });
-
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
 
