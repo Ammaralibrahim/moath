@@ -11,33 +11,30 @@ require("dotenv").config();
 
 const app = express();
 
+// Remove your existing custom CORS middleware and app.options("*", cors()) lines.
+// Keep the cors import.
 
-// 1. First: Handle OPTIONS preflight requests for ALL routes
-app.options("*", cors());
+// 1. Configure CORS for all routes
+const cors = require('cors');
+const corsOptions = {
+  origin: 'https://alsawaf.vercel.app', // Your frontend's exact origin
+  credentials: true, // Allows cookies/authorization headers
+  optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
+  allowedHeaders: ['Content-Type', 'x-admin-key', 'Authorization', 'x-token', 'Accept', 'Range'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
+};
 
-// 2. Configure CORS middleware with specific origin and credentials
-app.use(cors({
-  origin: "https://alsawaf.vercel.app",
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "x-admin-key", "Authorization", "x-token", "Accept"],
-  exposedHeaders: ["Content-Range", "X-Content-Range"],
-  maxAge: 86400, // 24 hours for preflight cache
-}));
+app.use(cors(corsOptions));
 
-// 3. Set CORS headers manually for all responses
+// 2. Handle preflight OPTIONS requests for ALL routes
+app.options('*', cors(corsOptions)); // Be explicit
+
+// 3. Keep your manual header setting middleware AFTER CORS
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "https://alsawaf.vercel.app");
   res.header("Access-Control-Allow-Credentials", "true");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD");
   res.header("Access-Control-Allow-Headers", "Content-Type, x-admin-key, Authorization, x-token, Accept, Range");
-  
-  // Handle preflight requests
-  if (req.method === "OPTIONS") {
-    res.header("Access-Control-Max-Age", "86400");
-    return res.status(200).end();
-  }
-  
   next();
 });
 app.use(express.json({ limit: "50mb" }));
