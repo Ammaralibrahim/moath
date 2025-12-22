@@ -11,28 +11,18 @@ require("dotenv").config();
 
 const app = express();
 
-// Enhanced CORS configuration
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      const allowedOrigins = [
-        "http://localhost:3000",
-        "https://alsawaf.vercel.app",
-        process.env.FRONTEND_URL,
-      ].filter(Boolean);
+// Simplified CORS configuration
+app.use(cors({
+  origin: ["http://localhost:3000", "https://alsawaf.vercel.app"],
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "x-admin-key", "Authorization", "x-token"],
+}));
 
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "x-admin-key", "Authorization", "x-token"],
-  })
-);
+// Handle OPTIONS requests explicitly
+app.options("*", cors());
 
+// Then your other middleware
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
 
