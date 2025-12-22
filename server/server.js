@@ -11,15 +11,14 @@ require("dotenv").config();
 
 const app = express();
 
-// Enhanced CORS configuration
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://alsawaf.vercel.app'],
+  origin: ['https://alsawaf.vercel.app', 'http://localhost:3000'],
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key', 'X-Requested-With']
 }));
 
-// OPTIONS isteklerini handle et
+// OPTIONS isteklerini özel olarak handle et
 app.options('*', cors());
 
 app.use(express.json({ limit: "50mb" }));

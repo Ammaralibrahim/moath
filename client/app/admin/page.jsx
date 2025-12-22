@@ -176,7 +176,7 @@ export default function AdminPanel() {
           'Content-Type': 'application/json',
           ...options.headers,
         },
-       credentials: 'omit', // Veya 'same-origin'
+       credentials: 'same-origin', // Veya 'same-origin'
       ...options,
     });
 
