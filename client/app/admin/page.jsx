@@ -176,8 +176,9 @@ export default function AdminPanel() {
           'Content-Type': 'application/json',
           ...options.headers,
         },
-        ...options,
-      })
+       credentials: 'omit', // Veya 'same-origin'
+      ...options,
+    });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
