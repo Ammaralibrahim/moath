@@ -14,31 +14,78 @@ const app = express();
 // Remove your existing custom CORS middleware and app.options("*", cors()) lines.
 // Keep the cors import.
 
-// 1. Configure CORS for all routes
-const cors = require('cors');
+// Gelişmiş CORS konfigürasyonu
 const corsOptions = {
-  origin: 'https://alsawaf.vercel.app', // Your frontend's exact origin
-  credentials: true, // Allows cookies/authorization headers
-  optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
-  allowedHeaders: ['Content-Type', 'x-admin-key', 'Authorization', 'x-token', 'Accept', 'Range'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range']
+  origin: [
+    'https://alsawaf.vercel.app', // Production frontend
+    'http://localhost:3000', // Development frontend
+    'https://alsawaf-api.vercel.app' // API'nin kendisi
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'x-admin-key', 
+    'x-token', 
+    'Accept', 
+    'Range',
+    'Origin',
+    'X-Requested-With'
+  ],
+  exposedHeaders: [
+    'Content-Range', 
+    'X-Content-Range',
+    'Content-Length',
+    'X-Total-Count'
+  ],
+  optionsSuccessStatus: 200,
+  maxAge: 86400 // 24 saat preflight cache
 };
 
+// CORS middleware'ini tüm route'lardan önce kullan
 app.use(cors(corsOptions));
 
-// 2. Handle preflight OPTIONS requests for ALL routes
-app.options('*', cors(corsOptions)); // Be explicit
+// OPTIONS request'lerini handle et (preflight)
+app.options('*', cors(corsOptions));
 
-// 3. Keep your manual header setting middleware AFTER CORS
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "https://alsawaf.vercel.app");
-  res.header("Access-Control-Allow-Credentials", "true");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD");
-  res.header("Access-Control-Allow-Headers", "Content-Type, x-admin-key, Authorization, x-token, Accept, Range");
-  next();
-});
+
+
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+
+
+// Header'ları manuel olarak da ekleyelim (güvenlik için)
+app.use((req, res, next) => {
+  const allowedOrigins = [
+    'https://alsawaf.vercel.app',
+    'http://localhost:3000',
+    'https://alsawaf-api.vercel.app'
+  ];
+  
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD');
+  res.header('Access-Control-Allow-Headers', 
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-admin-key, x-token, Range'
+  );
+  res.header('Access-Control-Expose-Headers', 
+    'Content-Range, X-Content-Range, Content-Length, X-Total-Count'
+  );
+  res.header('Access-Control-Max-Age', '86400');
+  
+  // Preflight request için hızlı cevap
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+});
 
 // MongoDB connection with better error handling
 const MONGODB_URI =

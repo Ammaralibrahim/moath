@@ -168,27 +168,60 @@ export default function AdminPanel() {
   }
 
   // API Request Function
-  const apiRequest = useCallback(async (url, options = {}) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}${url}`, {
-        headers: {
-          'x-admin-key': ADMIN_API_KEY,
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
-        ...options,
-      })
+const apiRequest = useCallback(async (url, options = {}) => {
+  try {
+    const headers = {
+      'x-admin-key': ADMIN_API_KEY,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      ...options.headers,
+    };
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
+    // DELETE methodunda body olmamalı
+    const fetchOptions = {
+      ...options,
+      headers,
+      credentials: 'include', // Cookies ve authorization için
+      mode: 'cors', // CORS mode'u açıkça belirt
+    };
 
-      return await response.json()
-    } catch (error) {
-      console.error('API Request Error:', error)
-      throw error
+    // DELETE isteklerinde body'yi kaldır
+    if (options.method === 'DELETE') {
+      delete fetchOptions.body;
     }
-  }, [])
+
+    const response = await fetch(`${API_BASE_URL}${url}`, fetchOptions);
+
+    // Network error kontrolü
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('API Error Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        url: `${API_BASE_URL}${url}`,
+        error: errorText
+      });
+      
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data;
+    
+  } catch (error) {
+    console.error('API Request Error:', error);
+    
+    // Network error durumunda retry mekanizması
+    if (error.message.includes('Failed to fetch')) {
+      setMessage({ 
+        type: 'error', 
+        text: 'Sunucuya bağlanılamıyor. Lütfen internet bağlantınızı kontrol edin.' 
+      });
+    }
+    
+    throw error;
+  }
+}, []);
 
   // Initial Data Fetch
   useEffect(() => {
