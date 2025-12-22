@@ -1,0 +1,52 @@
+{
+  "patients": [],
+  "appointments": [
+    {
+      "_id": "691fd33a28ddc23bbb558da3",
+      "patientName": "عمار",
+      "phoneNumber": "56456546544645",
+      "appointmentDate": "2025-11-22T00:00:00.000Z",
+      "appointmentTime": "09:30",
+      "notes": "مريض ضغط",
+      "status": "confirmed",
+      "createdAt": "2025-11-21T02:49:30.359Z",
+      "updatedAt": "2025-11-21T02:54:31.902Z",
+      "__v": 0
+    },
+    {
+      "_id": "694954a171fade38f345297f",
+      "patientName": "احمد",
+      "phoneNumber": "+96345824822",
+      "appointmentDate": "2025-12-22T00:00:00.000Z",
+      "appointmentTime": "09:00",
+      "notes": "انا مريض ضغط",
+      "status": "confirmed",
+      "createdAt": "2025-12-22T14:24:33.211Z",
+      "updatedAt": "2025-12-22T15:12:26.736Z",
+      "__v": 0
+    },
+    {
+      "_id": "6949698671fade38f34529d1",
+      "patientName": "عمر",
+      "phoneNumber": "+9634586246",
+      "appointmentDate": "2025-12-24T00:00:00.000Z",
+      "appointmentTime": "09:30",
+      "notes": "انا مريض سكري وضغط مزمن",
+      "status": "confirmed",
+      "createdAt": "2025-12-22T15:53:42.691Z",
+      "updatedAt": "2025-12-22T15:55:31.452Z",
+      "__v": 0
+    }
+  ],
+  "metadata": {
+    "timestamp": 1766422821846,
+    "type": "full",
+    "database": "test",
+    "version": "1.0"
+  },
+  "stats": {
+    "patients": 0,
+    "appointments": 3,
+    "backupDate": "2025-12-22T17:00:22.157Z"
+  }
+}

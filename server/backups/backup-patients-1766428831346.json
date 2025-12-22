@@ -1,0 +1,93 @@
+{
+  "patients": [
+    {
+      "_id": "69497987313f8241c120aa83",
+      "patientName": "عمر",
+      "phoneNumber": "543543634635654",
+      "gender": "male",
+      "isActive": true,
+      "appointmentCount": 0,
+      "totalVisits": 0,
+      "createdAt": "2025-12-22T17:01:59.538Z",
+      "updatedAt": "2025-12-22T17:43:02.255Z",
+      "backupId": "04266579-0498-42ef-a81d-8560c832c18d",
+      "__v": 0,
+      "lastVisit": "2025-12-22T17:02:00.004Z"
+    },
+    {
+      "_id": "694979a9313f8241c120aa8b",
+      "patientName": "عثمان",
+      "phoneNumber": "43646346643",
+      "gender": "male",
+      "isActive": true,
+      "appointmentCount": 0,
+      "totalVisits": 0,
+      "createdAt": "2025-12-22T17:02:33.949Z",
+      "updatedAt": "2025-12-22T17:43:00.748Z",
+      "backupId": "f9424001-632f-4c77-8fdc-b2e27327cacd",
+      "__v": 0,
+      "lastVisit": "2025-12-22T17:02:34.396Z"
+    },
+    {
+      "_id": "694979c1313f8241c120aa93",
+      "patientName": "احمد",
+      "phoneNumber": "6564645654634",
+      "gender": "male",
+      "isActive": true,
+      "appointmentCount": 0,
+      "totalVisits": 0,
+      "createdAt": "2025-12-22T17:02:57.692Z",
+      "updatedAt": "2025-12-22T17:42:39.127Z",
+      "backupId": "6b8774ca-1274-467d-81a4-811e87e9e49e",
+      "__v": 0,
+      "lastVisit": "2025-12-22T17:02:58.097Z"
+    },
+    {
+      "_id": "69497c4f313f8241c120aaa0",
+      "patientName": "رهف",
+      "phoneNumber": "54643643643634",
+      "gender": "male",
+      "isActive": true,
+      "appointmentCount": 0,
+      "totalVisits": 0,
+      "createdAt": "2025-12-22T17:13:51.235Z",
+      "updatedAt": "2025-12-22T17:42:50.974Z",
+      "backupId": "bb7705ac-2262-42f9-b11e-281ac8697af1",
+      "__v": 0,
+      "lastVisit": "2025-12-22T17:13:52.055Z"
+    },
+    {
+      "_id": "69498392d10401beba989c20",
+      "patientName": "عمار",
+      "phoneNumber": "63465654654645645",
+      "birthDate": "2008-09-03T00:00:00.000Z",
+      "gender": "male",
+      "address": "",
+      "email": "",
+      "emergencyContact": "",
+      "medicalHistory": "",
+      "allergies": "",
+      "medications": "",
+      "notes": "",
+      "isActive": true,
+      "lastVisit": "2025-12-22T17:44:50.140Z",
+      "appointmentCount": 1,
+      "totalVisits": 1,
+      "createdAt": "2025-12-22T17:44:50.141Z",
+      "updatedAt": "2025-12-22T17:44:50.765Z",
+      "backupId": "dfae20fd-fcc1-46b1-980e-b92f3255cdca",
+      "__v": 0
+    }
+  ],
+  "metadata": {
+    "timestamp": 1766428831346,
+    "type": "patients",
+    "database": "test",
+    "version": "1.0"
+  },
+  "stats": {
+    "patients": 5,
+    "appointments": 0,
+    "backupDate": "2025-12-22T18:40:31.494Z"
+  }
+}

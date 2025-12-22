@@ -1,0 +1,40 @@
+{
+  "appointments": [
+    {
+      "_id": "69498392d10401beba989c22",
+      "patientName": "عمار",
+      "phoneNumber": "63465654654645645",
+      "appointmentDate": "2025-12-22T00:00:00.000Z",
+      "appointmentTime": "09:00",
+      "appointmentType": "mri",
+      "doctorPreference": "",
+      "birthDate": "2008-09-03T00:00:00.000Z",
+      "gender": "male",
+      "email": "",
+      "address": "",
+      "emergencyContact": "",
+      "medicalHistory": "",
+      "allergies": "",
+      "medications": "",
+      "notes": "",
+      "insurance": "no",
+      "insuranceNumber": "",
+      "previousVisit": "no",
+      "status": "pending",
+      "patientId": "69498392d10401beba989c20",
+      "createdAt": "2025-12-22T17:44:50.310Z",
+      "updatedAt": "2025-12-22T17:44:50.314Z",
+      "__v": 0
+    }
+  ],
+  "metadata": {
+    "timestamp": 1766428837603,
+    "type": "appointments",
+    "version": "1.0"
+  },
+  "stats": {
+    "patients": 0,
+    "appointments": 1,
+    "backupDate": "2025-12-22T18:40:40.655Z"
+  }
+}
