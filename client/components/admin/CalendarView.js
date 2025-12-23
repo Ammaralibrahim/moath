@@ -38,13 +38,26 @@ export default function CalendarView({ appointments }) {
   
   const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
 
+  const getStatusColor = (status) => {
+    switch(status) {
+      case 'confirmed': return colors.success + '40'
+      case 'pending': return colors.warning + '40'
+      case 'cancelled': return colors.error + '40'
+      default: return colors.borderLight
+    }
+  }
+
   return (
     <div className="bg-surface rounded-2xl border p-6 shadow-xl">
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-lg font-bold" style={{ color: colors.text }}>عرض التقويم</h3>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setCalendarDate(new Date(calendarDate.setMonth(calendarDate.getMonth() - 1)))}
+            onClick={() => {
+              const newDate = new Date(calendarDate)
+              newDate.setMonth(calendarDate.getMonth() - 1)
+              setCalendarDate(newDate)
+            }}
             className="p-2 rounded-xl hover:bg-surfaceLight transition-colors"
             style={{ color: colors.textLight }}
           >
@@ -56,7 +69,11 @@ export default function CalendarView({ appointments }) {
             {calendarDate.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' })}
           </span>
           <button
-            onClick={() => setCalendarDate(new Date(calendarDate.setMonth(calendarDate.getMonth() + 1)))}
+            onClick={() => {
+              const newDate = new Date(calendarDate)
+              newDate.setMonth(calendarDate.getMonth() + 1)
+              setCalendarDate(newDate)
+            }}
             className="p-2 rounded-xl hover:bg-surfaceLight transition-colors"
             style={{ color: colors.textLight }}
           >
@@ -86,7 +103,9 @@ export default function CalendarView({ appointments }) {
               <>
                 <div className="text-right mb-2">
                   <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-sm font-semibold ${
-                    day.date.toDateString() === new Date().toDateString() ? 'bg-indigo-500 text-white' : ''
+                    day.date.toDateString() === new Date().toDateString() 
+                      ? 'bg-indigo-500 text-white' 
+                      : ''
                   }`}>
                     {day.date.getDate()}
                   </span>
@@ -97,11 +116,7 @@ export default function CalendarView({ appointments }) {
                       key={apt._id}
                       className="p-1 text-xs rounded-lg truncate cursor-pointer hover:opacity-90 transition-opacity"
                       style={{ 
-                        backgroundColor: apt.status === 'confirmed' 
-                          ? colors.success + '40' 
-                          : apt.status === 'pending'
-                          ? colors.warning + '40'
-                          : colors.error + '40',
+                        backgroundColor: getStatusColor(apt.status),
                         color: colors.text
                       }}
                       onClick={() => console.log('View appointment', apt._id)}

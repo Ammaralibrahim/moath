@@ -4,7 +4,7 @@ import { colors } from '@/components/shared/constants'
 import StatusBadge from '@/components/ui/StatusBadge'
 import { formatDate } from '@/components/shared/utils'
 
-export default function AppointmentsTable({ appointments }) {
+export default function AppointmentsTable({ appointments, onEdit, onDelete }) {
   if (appointments.length === 0) {
     return (
       <div className="rounded-2xl border overflow-hidden shadow-xl">
@@ -68,7 +68,7 @@ export default function AppointmentsTable({ appointments }) {
                 <td className="px-6 py-3">
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => console.log('Edit', appointment._id)}
+                      onClick={() => onEdit(appointment)}
                       className="px-3 py-1 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity"
                       style={{ 
                         background: colors.gradientPrimary,
@@ -78,7 +78,7 @@ export default function AppointmentsTable({ appointments }) {
                       تعديل
                     </button>
                     <button
-                      onClick={() => console.log('Delete', appointment._id)}
+                      onClick={() => onDelete(appointment._id)}
                       className="px-3 py-1 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity"
                       style={{ 
                         background: colors.gradientError,

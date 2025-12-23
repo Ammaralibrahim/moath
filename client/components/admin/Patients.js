@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import PatientsTable from './PatientsTable'
+import PatientModal from './modals/PatientModal'
+import PatientViewModal from './modals/PatientViewModal'
 import { colors } from '@/components/shared/constants'
 import { apiRequest } from '@/components/shared/api'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -19,6 +21,9 @@ export default function Patients() {
     totalPages: 1,
     total: 0
   })
+  const [selectedPatient, setSelectedPatient] = useState(null)
+  const [showPatientModal, setShowPatientModal] = useState(false)
+  const [showPatientViewModal, setShowPatientViewModal] = useState(false)
 
   useEffect(() => {
     fetchPatients()
@@ -55,6 +60,50 @@ export default function Patients() {
     setPagination({ ...pagination, page: 1 })
   }
 
+  const handleSavePatient = async (patientData) => {
+    try {
+      setLoading(true)
+      const method = patientData._id ? 'PUT' : 'POST'
+      const url = patientData._id 
+        ? `/api/patients/${patientData._id}`
+        : '/api/patients'
+      
+      const data = await apiRequest(url, {
+        method,
+        body: JSON.stringify(patientData)
+      })
+      
+      if (data.success) {
+        fetchPatients()
+        setShowPatientModal(false)
+        setSelectedPatient(null)
+      }
+    } catch (error) {
+      console.error('Error saving patient:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeletePatient = async (patientId) => {
+    if (window.confirm('هل أنت متأكد من حذف هذا المريض؟')) {
+      try {
+        setLoading(true)
+        const data = await apiRequest(`/api/patients/${patientId}`, {
+          method: 'DELETE'
+        })
+        
+        if (data.success) {
+          fetchPatients()
+        }
+      } catch (error) {
+        console.error('Error deleting patient:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border p-6 shadow-xl" style={{ 
@@ -64,7 +113,10 @@ export default function Patients() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold" style={{ color: colors.text }}>إدارة المرضى</h3>
           <button
-            onClick={() => console.log('Add patient')}
+            onClick={() => {
+              setSelectedPatient(null)
+              setShowPatientModal(true)
+            }}
             className="px-4 py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity shadow-lg"
             style={{ 
               background: colors.gradientSuccess,
@@ -148,6 +200,36 @@ export default function Patients() {
           patients={patients}
           pagination={pagination}
           onPageChange={(page) => setPagination({...pagination, page})}
+          onView={(patient) => {
+            setSelectedPatient(patient)
+            setShowPatientViewModal(true)
+          }}
+          onEdit={(patient) => {
+            setSelectedPatient(patient)
+            setShowPatientModal(true)
+          }}
+          onDelete={handleDeletePatient}
+        />
+      )}
+
+      {showPatientModal && (
+        <PatientModal
+          patient={selectedPatient}
+          onClose={() => {
+            setShowPatientModal(false)
+            setSelectedPatient(null)
+          }}
+          onSave={handleSavePatient}
+        />
+      )}
+
+      {showPatientViewModal && (
+        <PatientViewModal
+          patient={selectedPatient}
+          onClose={() => {
+            setShowPatientViewModal(false)
+            setSelectedPatient(null)
+          }}
         />
       )}
     </div>

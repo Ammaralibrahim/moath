@@ -1,8 +1,31 @@
 'use client'
 
 import { colors } from '@/components/shared/constants'
+import { formatFileSize, formatDate } from '@/components/shared/utils'
 
 export default function RestoreModal({ backup, onClose, onConfirm }) {
+  if (!backup) return null
+
+  const getTypeText = (type) => {
+    switch(type) {
+      case 'full': return 'كاملة'
+      case 'patients': return 'مرضى'
+      case 'appointments': return 'مواعيد'
+      case 'partial': return 'جزئية'
+      case 'restoration': return 'استعادة'
+      default: return type
+    }
+  }
+
+  const getTypeClass = (type) => {
+    switch(type) {
+      case 'full': return 'bg-indigo-500/20 text-indigo-400'
+      case 'patients': return 'bg-emerald-500/20 text-emerald-400'
+      case 'appointments': return 'bg-yellow-500/20 text-yellow-400'
+      default: return 'bg-gray-500/20 text-gray-400'
+    }
+  }
+
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div className="rounded-2xl max-w-md w-full p-6 shadow-2xl" style={{ 
@@ -19,10 +42,48 @@ export default function RestoreModal({ backup, onClose, onConfirm }) {
             </svg>
           </div>
           <h3 className="text-lg font-bold mb-2" style={{ color: colors.text }}>تأكيد استعادة النسخة الاحتياطية</h3>
-          <p className="text-sm" style={{ color: colors.textLight }}>
+          <p className="text-sm mb-4" style={{ color: colors.textLight }}>
             هل أنت متأكد من استعادة النسخة الاحتياطية؟<br />
             سيتم حذف جميع البيانات الحالية واستبدالها بالنسخة المحفوظة.
           </p>
+          
+          {/* Backup Details */}
+          <div className="bg-surfaceLight rounded-lg p-4 text-right" style={{ borderColor: colors.border }}>
+            <div className="mb-2">
+              <span className="text-sm font-medium" style={{ color: colors.textLight }}>اسم الملف:</span>
+              <p className="text-sm font-semibold" style={{ color: colors.text }}>{backup.filename}</p>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <span className="text-sm font-medium" style={{ color: colors.textLight }}>النوع:</span>
+                <span className={`px-2 py-1 rounded-lg text-xs font-medium block mt-1 ${getTypeClass(backup.type)}`}>
+                  {getTypeText(backup.type)}
+                </span>
+              </div>
+              
+              <div>
+                <span className="text-sm font-medium" style={{ color: colors.textLight }}>الحجم:</span>
+                <p className="text-sm font-semibold mt-1" style={{ color: colors.text }}>
+                  {formatFileSize(backup.size)}
+                </p>
+              </div>
+              
+              <div>
+                <span className="text-sm font-medium" style={{ color: colors.textLight }}>عدد السجلات:</span>
+                <p className="text-sm font-semibold mt-1" style={{ color: colors.text }}>
+                  {backup.recordCount}
+                </p>
+              </div>
+              
+              <div>
+                <span className="text-sm font-medium" style={{ color: colors.textLight }}>تاريخ الإنشاء:</span>
+                <p className="text-sm font-semibold mt-1" style={{ color: colors.text }}>
+                  {formatDate(backup.backupDate)}
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
         
         <div className="flex gap-3 justify-center mt-8">

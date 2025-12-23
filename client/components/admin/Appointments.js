@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import AppointmentsTable from './AppointmentsTable'
 import CalendarView from './CalendarView'
 import Filters from './Filters'
+import AppointmentModal from './modals/AppointmentModal'
 import { colors } from '@/components/shared/constants'
 import { apiRequest } from '@/components/shared/api'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -19,6 +20,8 @@ export default function Appointments() {
     phoneNumber: '',
     showPast: false
   })
+  const [selectedAppointment, setSelectedAppointment] = useState(null)
+  const [showAppointmentModal, setShowAppointmentModal] = useState(false)
 
   useEffect(() => {
     fetchAppointments()
@@ -64,8 +67,71 @@ export default function Appointments() {
     return filtered
   }
 
+  const handleSaveAppointment = async (appointmentData) => {
+    try {
+      setLoading(true)
+      const method = appointmentData._id ? 'PUT' : 'POST'
+      const url = appointmentData._id 
+        ? `/api/admin/appointments/${appointmentData._id}`
+        : '/api/admin/appointments'
+      
+      const data = await apiRequest(url, {
+        method,
+        body: JSON.stringify(appointmentData)
+      })
+      
+      if (data.success) {
+        fetchAppointments()
+        setShowAppointmentModal(false)
+        setSelectedAppointment(null)
+      }
+    } catch (error) {
+      console.error('Error saving appointment:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteAppointment = async (appointmentId) => {
+    if (window.confirm('هل أنت متأكد من حذف هذا الموعد؟')) {
+      try {
+        setLoading(true)
+        const data = await apiRequest(`/api/admin/appointments/${appointmentId}`, {
+          method: 'DELETE'
+        })
+        
+        if (data.success) {
+          fetchAppointments()
+        }
+      } catch (error) {
+        console.error('Error deleting appointment:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+  }
+
+  const handleAddNewAppointment = () => {
+    setSelectedAppointment(null)
+    setShowAppointmentModal(true)
+  }
+
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold" style={{ color: colors.text }}>إدارة المواعيد</h1>
+        <button
+          onClick={handleAddNewAppointment}
+          className="px-4 py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity shadow-lg"
+          style={{ 
+            background: colors.gradientPrimary,
+            color: '#FFFFFF'
+          }}
+        >
+          إضافة موعد جديد
+        </button>
+      </div>
+      
       <Filters 
         filters={filters}
         onFilterChange={handleFilterChange}
@@ -120,9 +186,27 @@ export default function Appointments() {
       {loading ? (
         <LoadingSpinner />
       ) : viewMode === 'table' ? (
-        <AppointmentsTable appointments={filteredAppointments()} />
+        <AppointmentsTable 
+          appointments={filteredAppointments()}
+          onEdit={(appointment) => {
+            setSelectedAppointment(appointment)
+            setShowAppointmentModal(true)
+          }}
+          onDelete={handleDeleteAppointment}
+        />
       ) : (
         <CalendarView appointments={filteredAppointments()} />
+      )}
+
+      {showAppointmentModal && (
+        <AppointmentModal
+          appointment={selectedAppointment}
+          onClose={() => {
+            setShowAppointmentModal(false)
+            setSelectedAppointment(null)
+          }}
+          onSave={handleSaveAppointment}
+        />
       )}
     </div>
   )

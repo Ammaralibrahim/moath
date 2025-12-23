@@ -1,4 +1,4 @@
-// app/page.tsx (or your main component)
+// app/page.tsx (güncellenmiş)
 'use client'
 
 import { useState, useEffect, ChangeEvent, FormEvent } from 'react'
@@ -46,6 +46,7 @@ export default function Home() {
   const [loading, setLoading] = useState<boolean>(false)
   const [message, setMessage] = useState<Message>({ type: '', text: '' })
   const [availableDates, setAvailableDates] = useState<AvailableDate[]>([])
+  const [slotAvailability, setSlotAvailability] = useState<{[key: string]: boolean}>({})
 
   const today = new Date()
   const maxDate = new Date()
@@ -60,7 +61,7 @@ export default function Home() {
     try {
       setLoading(true)
       const response = await axios.get<{ success: boolean; data: AvailableDate[]; message?: string }>(
-        `${API_BASE_URL}/api/available-dates`
+        `${API_BASE_URL}/api/availability/available-dates`
       )
       if (response.data.success) {
         setAvailableDates(response.data.data)
@@ -69,7 +70,7 @@ export default function Home() {
       }
     } catch (error) {
       console.error('خطأ في جلب التواريخ:', error)
-      // Fallback dates
+      // Fallback dates - show dates but mark them as unavailable
       const dates: AvailableDate[] = []
       const currentDate = new Date(today)
       
@@ -78,13 +79,18 @@ export default function Home() {
         if (dayOfWeek !== 5) { // Exclude Fridays
           dates.push({
             date: formatDate(new Date(currentDate)),
-            available: true,
-            availableSlots: 8
+            available: false, // Mark as unavailable in fallback
+            availableSlots: 0
           })
         }
         currentDate.setDate(currentDate.getDate() + 1)
       }
       setAvailableDates(dates)
+      
+      setMessage({ 
+        type: 'error', 
+        text: 'تعذر الاتصال بالخادم. يرجى المحاولة لاحقاً.' 
+      })
     } finally {
       setLoading(false)
     }
@@ -103,25 +109,48 @@ export default function Home() {
   const fetchAvailableSlots = async (date: string): Promise<void> => {
     try {
       setLoading(true)
+      setMessage({ type: '', text: '' })
+      
       const response = await axios.get<{ success: boolean; data: string[]; message?: string }>(
-        `${API_BASE_URL}/api/available-slots?date=${date}`
+        `${API_BASE_URL}/api/availability/available-slots?date=${date}`
       )
+      
       if (response.data.success) {
         setAvailableSlots(response.data.data)
+        
+        if (response.data.data.length === 0) {
+          setMessage({ 
+            type: 'error', 
+            text: 'لا توجد أوقات متاحة لهذا اليوم. يرجى اختيار يوم آخر.' 
+          })
+        }
       } else {
         throw new Error(response.data.message || 'Failed to fetch slots')
       }
     } catch (error) {
       console.error('خطأ في جلب الأوقات:', error)
-      // Fallback time slots (align with working hours)
-      const fallbackTimes = [
-        '08:00', '09:00', '10:00', '11:00', 
-        '12:00', '13:00', '14:00', '15:00',
-        '16:00', '17:00', '18:00'
-      ]
-      setAvailableSlots(fallbackTimes)
+      // Show fallback times but with proper messaging
+      setAvailableSlots([])
+      setMessage({ 
+        type: 'error', 
+        text: 'تعذر جلب الأوقات المتاحة. يرجى المحاولة مرة أخرى أو اختيار يوم آخر.' 
+      })
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Check specific slot availability before final submission
+  const checkSlotAvailability = async (date: string, time: string): Promise<boolean> => {
+    try {
+      const response = await axios.get<{ success: boolean; data: { available: boolean } }>(
+        `${API_BASE_URL}/api/availability/check-slot?date=${date}&time=${time}`
+      )
+      
+      return response.data.success && response.data.data.available
+    } catch (error) {
+      console.error('خطأ في التحقق من توافر الوقت:', error)
+      return false
     }
   }
 
@@ -173,6 +202,17 @@ export default function Home() {
       return
     }
 
+    // Double-check slot availability before submitting
+    const isSlotAvailable = await checkSlotAvailability(selectedDate, selectedTime)
+    if (!isSlotAvailable) {
+      setMessage({ 
+        type: 'error', 
+        text: 'عذراً، هذا الموعد لم يعد متاحاً. يرجى اختيار وقت آخر.' 
+      })
+      setStep(2) // Go back to time selection
+      return
+    }
+
     setLoading(true)
     setMessage({ type: '', text: '' })
     
@@ -202,7 +242,11 @@ export default function Home() {
           text: 'تم حجز الموعد بنجاح! سنتصل بك لتأكيد الحجز.' 
         })
         setStep(4)
+        // Refresh availability data after successful booking
         fetchAvailableDates()
+        if (selectedDate) {
+          fetchAvailableSlots(selectedDate)
+        }
       } else {
         throw new Error(response.data.message || 'فشل في حجز الموعد')
       }
@@ -213,7 +257,11 @@ export default function Home() {
       
       if (axios.isAxiosError(error)) {
         if (error.response) {
-          errorMessage = error.response.data.message || errorMessage
+          if (error.response.status === 400) {
+            errorMessage = error.response.data.message || 'هذا الموعد محجوز مسبقاً.'
+          } else {
+            errorMessage = error.response.data.message || errorMessage
+          }
         } else if (error.request) {
           errorMessage = 'تعذر الاتصال بالخادم. يرجى التحقق من اتصال الإنترنت.'
         }

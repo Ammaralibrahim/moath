@@ -3,7 +3,7 @@
 import { colors } from '@/components/shared/constants'
 import { calculateAge, formatDate } from '@/components/shared/utils'
 
-export default function PatientsTable({ patients, pagination, onPageChange }) {
+export default function PatientsTable({ patients, pagination, onPageChange, onView, onEdit, onDelete }) {
   if (patients.length === 0) {
     return (
       <div className="rounded-2xl border overflow-hidden shadow-xl">
@@ -90,7 +90,7 @@ export default function PatientsTable({ patients, pagination, onPageChange }) {
                   <td className="px-6 py-3">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => console.log('View patient', patient._id)}
+                        onClick={() => onView(patient)}
                         className="px-3 py-1 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity"
                         style={{ 
                           background: colors.gradientPrimary,
@@ -100,7 +100,17 @@ export default function PatientsTable({ patients, pagination, onPageChange }) {
                         عرض
                       </button>
                       <button
-                        onClick={() => console.log('Delete patient', patient._id)}
+                        onClick={() => onEdit(patient)}
+                        className="px-3 py-1 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity"
+                        style={{ 
+                          background: colors.gradientInfo,
+                          color: '#FFFFFF'
+                        }}
+                      >
+                        تعديل
+                      </button>
+                      <button
+                        onClick={() => onDelete(patient._id)}
                         className="px-3 py-1 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity"
                         style={{ 
                           background: colors.gradientError,

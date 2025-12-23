@@ -11,6 +11,7 @@ const patientRoutes = require("./routes/patients");
 const appointmentRoutes = require("./routes/appointments");
 const backupRoutes = require("./routes/backup");
 const systemRoutes = require("./routes/system");
+const availabilityRoutes = require("./routes/availability"); // EKSİK OLAN ROUTE
 
 const app = express();
 
@@ -36,6 +37,7 @@ app.use("/api/admin/appointments", authMiddleware, appointmentRoutes);
 app.use("/api/backup", authMiddleware, backupRoutes);
 app.use("/api/system", authMiddleware, systemRoutes);
 app.use("/api/health", systemRoutes);
+app.use("/api/availability", availabilityRoutes); // EKSİK OLAN ROUTE'U EKLE
 
 // Hata yönetimi middleware'i
 app.use(errorHandler);

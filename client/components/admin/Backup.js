@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import BackupTable from './BackupTable'
+import RestoreModal from './modals/RestoreModal'
 import { colors } from '@/components/shared/constants'
 import { apiRequest } from '@/components/shared/api'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -14,6 +15,8 @@ export default function Backup() {
     totalPages: 1,
     total: 0
   })
+  const [selectedBackup, setSelectedBackup] = useState(null)
+  const [showRestoreModal, setShowRestoreModal] = useState(false)
 
   useEffect(() => {
     fetchBackups()
@@ -58,6 +61,64 @@ export default function Backup() {
     }
   }
 
+  const handleDownload = async (backupId, filename) => {
+    try {
+      setLoading(true)
+      const data = await apiRequest(`/api/backup/download/${backupId}`)
+      
+      if (data.success && data.downloadUrl) {
+        window.open(data.downloadUrl, '_blank')
+      }
+    } catch (error) {
+      console.error('Error downloading backup:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDelete = async (backupId) => {
+    if (window.confirm('هل أنت متأكد من حذف هذه النسخة الاحتياطية؟')) {
+      try {
+        setLoading(true)
+        const data = await apiRequest(`/api/backup/${backupId}`, {
+          method: 'DELETE'
+        })
+        
+        if (data.success) {
+          fetchBackups()
+        }
+      } catch (error) {
+        console.error('Error deleting backup:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+  }
+
+  const handleRestore = (backup) => {
+    setSelectedBackup(backup)
+    setShowRestoreModal(true)
+  }
+
+  const confirmRestore = async (backup) => {
+    try {
+      setLoading(true)
+      const data = await apiRequest(`/api/backup/restore/${backup._id}`, {
+        method: 'POST'
+      })
+      
+      if (data.success) {
+        console.log('Backup restored successfully')
+        setShowRestoreModal(false)
+        setSelectedBackup(null)
+      }
+    } catch (error) {
+      console.error('Error restoring backup:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Backup Actions */}
@@ -71,7 +132,7 @@ export default function Backup() {
           <button
             onClick={() => handleCreateBackup('full')}
             disabled={loading}
-            className="p-4 rounded-xl border hover:transform hover:scale-[1.02] transition-all text-right group"
+            className="p-4 rounded-xl border hover:transform hover:scale-[1.02] transition-all text-right group disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ 
               borderColor: colors.borderLight,
               backgroundColor: colors.surfaceLight,
@@ -90,7 +151,7 @@ export default function Backup() {
           <button
             onClick={() => handleCreateBackup('patients')}
             disabled={loading}
-            className="p-4 rounded-xl border hover:transform hover:scale-[1.02] transition-all text-right group"
+            className="p-4 rounded-xl border hover:transform hover:scale-[1.02] transition-all text-right group disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ 
               borderColor: colors.borderLight,
               backgroundColor: colors.surfaceLight,
@@ -109,7 +170,7 @@ export default function Backup() {
           <button
             onClick={() => handleCreateBackup('appointments')}
             disabled={loading}
-            className="p-4 rounded-xl border hover:transform hover:scale-[1.02] transition-all text-right group"
+            className="p-4 rounded-xl border hover:transform hover:scale-[1.02] transition-all text-right group disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ 
               borderColor: colors.borderLight,
               backgroundColor: colors.surfaceLight,
@@ -134,6 +195,20 @@ export default function Backup() {
           backups={backups}
           pagination={pagination}
           onPageChange={(page) => setPagination({...pagination, page})}
+          onDownload={handleDownload}
+          onRestore={handleRestore}
+          onDelete={handleDelete}
+        />
+      )}
+
+      {showRestoreModal && (
+        <RestoreModal
+          backup={selectedBackup}
+          onClose={() => {
+            setShowRestoreModal(false)
+            setSelectedBackup(null)
+          }}
+          onConfirm={confirmRestore}
         />
       )}
     </div>

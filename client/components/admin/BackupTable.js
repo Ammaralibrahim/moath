@@ -3,17 +3,45 @@
 import { colors } from '@/components/shared/constants'
 import { formatFileSize, formatDate } from '@/components/shared/utils'
 
-export default function BackupTable({ backups, pagination, onPageChange }) {
-  const handleDownload = (backupId, filename) => {
-    console.log('Download backup:', backupId, filename)
+export default function BackupTable({ backups, pagination, onPageChange, onDownload, onRestore, onDelete }) {
+  const getTypeText = (type) => {
+    switch(type) {
+      case 'full': return 'كاملة'
+      case 'patients': return 'مرضى'
+      case 'appointments': return 'مواعيد'
+      case 'partial': return 'جزئية'
+      case 'restoration': return 'استعادة'
+      default: return type
+    }
   }
 
-  const handleRestore = (backupId) => {
-    console.log('Restore backup:', backupId)
+  const getTypeClass = (type) => {
+    switch(type) {
+      case 'full': return 'bg-indigo-500/20 text-indigo-400'
+      case 'patients': return 'bg-emerald-500/20 text-emerald-400'
+      case 'appointments': return 'bg-yellow-500/20 text-yellow-400'
+      case 'partial': return 'bg-blue-500/20 text-blue-400'
+      case 'restoration': return 'bg-purple-500/20 text-purple-400'
+      default: return 'bg-gray-500/20 text-gray-400'
+    }
   }
 
-  const handleDelete = (backupId) => {
-    console.log('Delete backup:', backupId)
+  const getStatusClass = (status) => {
+    switch(status) {
+      case 'success': return 'bg-emerald-500/20 text-emerald-400'
+      case 'failed': return 'bg-rose-500/20 text-rose-400'
+      case 'pending': return 'bg-yellow-500/20 text-yellow-400'
+      default: return 'bg-gray-500/20 text-gray-400'
+    }
+  }
+
+  const getStatusText = (status) => {
+    switch(status) {
+      case 'success': return 'ناجحة'
+      case 'failed': return 'فشلت'
+      case 'pending': return 'قيد الانتظار'
+      default: return status
+    }
   }
 
   if (backups.length === 0) {
@@ -64,14 +92,8 @@ export default function BackupTable({ backups, pagination, onPageChange }) {
                     </div>
                   </td>
                   <td className="px-6 py-3">
-                    <span className={`px-2 py-1 rounded-lg text-xs font-medium ${
-                      backup.type === 'full' 
-                        ? 'bg-indigo-500/20 text-indigo-400' 
-                        : backup.type === 'patients'
-                        ? 'bg-emerald-500/20 text-emerald-400'
-                        : 'bg-yellow-500/20 text-yellow-400'
-                    }`}>
-                      {backup.type === 'full' ? 'كاملة' : backup.type === 'patients' ? 'مرضى' : 'مواعيد'}
+                    <span className={`px-2 py-1 rounded-lg text-xs font-medium ${getTypeClass(backup.type)}`}>
+                      {getTypeText(backup.type)}
                     </span>
                   </td>
                   <td className="px-6 py-3">
@@ -88,21 +110,16 @@ export default function BackupTable({ backups, pagination, onPageChange }) {
                     </div>
                   </td>
                   <td className="px-6 py-3">
-                    <span className={`px-2 py-1 rounded-lg text-xs font-medium ${
-                      backup.status === 'success' 
-                        ? 'bg-emerald-500/20 text-emerald-400' 
-                        : backup.status === 'failed'
-                        ? 'bg-rose-500/20 text-rose-400'
-                        : 'bg-yellow-500/20 text-yellow-400'
-                    }`}>
-                      {backup.status === 'success' ? 'ناجحة' : backup.status === 'failed' ? 'فشلت' : 'قيد الانتظار'}
+                    <span className={`px-2 py-1 rounded-lg text-xs font-medium ${getStatusClass(backup.status)}`}>
+                      {getStatusText(backup.status)}
                     </span>
                   </td>
                   <td className="px-6 py-3">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleDownload(backup._id, backup.filename)}
-                        className="px-3 py-1 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity"
+                        onClick={() => onDownload(backup._id, backup.filename)}
+                        disabled={backup.status !== 'success'}
+                        className="px-3 py-1 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{ 
                           background: colors.gradientInfo,
                           color: '#FFFFFF'
@@ -111,8 +128,9 @@ export default function BackupTable({ backups, pagination, onPageChange }) {
                         تحميل
                       </button>
                       <button
-                        onClick={() => handleRestore(backup._id)}
-                        className="px-3 py-1 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity"
+                        onClick={() => onRestore(backup)}
+                        disabled={backup.status !== 'success'}
+                        className="px-3 py-1 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{ 
                           background: colors.gradientSuccess,
                           color: '#FFFFFF'
@@ -121,7 +139,7 @@ export default function BackupTable({ backups, pagination, onPageChange }) {
                         استعادة
                       </button>
                       <button
-                        onClick={() => handleDelete(backup._id)}
+                        onClick={() => onDelete(backup._id)}
                         className="px-3 py-1 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity"
                         style={{ 
                           background: colors.gradientError,

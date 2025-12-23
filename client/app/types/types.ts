@@ -1,5 +1,4 @@
-// types.ts
-
+// types/types.ts - Güncel versiyon
 export interface ClinicInfo {
   name: string;
   description: string;
@@ -58,6 +57,16 @@ export interface Colors {
   warning: string;
 }
 
+export interface AdditionalInfo {
+  previousVisit: boolean;
+  previousVisitDate: string;
+  pregnant: boolean;
+  hasMetalImplants: boolean;
+  claustrophobic: boolean;
+  allergies: string;
+  currentMedications: string;
+}
+
 // Clinic Information - Damascus Medical Imaging Center
 export const CLINIC_INFO: ClinicInfo = {
   name: 'مؤسسة الصواف للتصوير الطبي',
@@ -94,3 +103,21 @@ export const arabicDays: string[] = ['الأحد', 'الإثنين', 'الثلا
 export const arabicMonths: string[] = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+
+// Appointment Status
+export type AppointmentStatus = 'pending' | 'confirmed' | 'cancelled';
+
+// Time Slot
+export interface TimeSlot {
+  time: string;
+  available: boolean;
+  bookedBy?: string;
+}
+// types/types.ts - تحديث
+export interface AvailableDate {
+  date: string;
+  available: boolean;
+  availableSlots: number;
+  totalSlots?: number;  // إضافة
+  bookedSlots?: number; // إضافة
+}
