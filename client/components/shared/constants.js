@@ -1,0 +1,35 @@
+export const colors = {
+  primary: '#6366F1',
+  primaryDark: '#4F46E5',
+  primaryLight: '#818CF8',
+  secondary: '#06B6D4',
+  secondaryDark: '#0891B2',
+  accent: '#10B981',
+  accentDark: '#059669',
+  background: '#181C14',
+  surface: '#242A1F',
+  surfaceLight: '#2F3628',
+  surfaceLighter: '#3B4432',
+  text: '#F1F5F9',
+  textLight: '#CBD5E1',
+  textMuted: '#94A3B8',
+  textDark: '#64748B',
+  border: '#3B4432',
+  borderLight: '#4A5440',
+  success: '#10B981',
+  successDark: '#059669',
+  error: '#EF4444',
+  errorDark: '#DC2626',
+  warning: '#F59E0B',
+  warningDark: '#D97706',
+  info: '#0EA5E9',
+  infoDark: '#0284C7',
+  gradientPrimary: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
+  gradientSuccess: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
+  gradientWarning: 'linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%)',
+  gradientError: 'linear-gradient(135deg, #EF4444 0%, #F87171 100%)',
+  gradientInfo: 'linear-gradient(135deg, #0EA5E9 0%, #3B82F6 100%)'
+}
+
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+export const ADMIN_API_KEY = process.env.NEXT_PUBLIC_ADMIN_API_KEY || 'admin123'
