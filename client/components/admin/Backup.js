@@ -1,214 +1,304 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import BackupTable from './BackupTable'
-import RestoreModal from './modals/RestoreModal'
+import PremiumBackupStats from './backup/BackupStats'
+import PremiumBackupList from './backup/BackupList'
+import PremiumCreateBackupModal from './backup/modals/CreateBackupModal'
+import PremiumRestoreModal from './backup/modals/RestoreModal'
+import BackupSettings from './backup/BackupSettings'
+import BackupHealth from './backup/BackupHealth'
 import { colors } from '@/components/shared/constants'
+import { 
+  IconDatabase, 
+  IconCog, 
+  IconHeart,
+  IconShieldCheck,
+  IconCloudArrowDown
+} from '@/components/shared/icons'
 import { apiRequest } from '@/components/shared/api'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import toast from 'react-hot-toast'
 
 export default function Backup() {
   const [backups, setBackups] = useState([])
+  const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showRestoreModal, setShowRestoreModal] = useState(false)
+  const [selectedBackup, setSelectedBackup] = useState(null)
+  const [activeTab, setActiveTab] = useState('backups')
   const [pagination, setPagination] = useState({
     page: 1,
-    totalPages: 1,
-    total: 0
+    limit: 10,
+    total: 0,
+    pages: 1
   })
-  const [selectedBackup, setSelectedBackup] = useState(null)
-  const [showRestoreModal, setShowRestoreModal] = useState(false)
 
   useEffect(() => {
     fetchBackups()
+    fetchStats()
   }, [pagination.page])
 
   const fetchBackups = async () => {
     try {
       setLoading(true)
-      const data = await apiRequest(`/api/backup/list?page=${pagination.page}&limit=10`)
+      const data = await apiRequest(`/api/backup?page=${pagination.page}&limit=${pagination.limit}`)
       
       if (data.success) {
         setBackups(data.data || [])
-        setPagination({
-          page: data.page,
-          totalPages: data.totalPages,
-          total: data.total
-        })
+        setPagination(data.pagination || pagination)
       }
     } catch (error) {
       console.error('Error fetching backups:', error)
+      toast.error('❌ فشل في تحميل النسخ الاحتياطية')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleCreateBackup = async (type = 'full') => {
+  const fetchStats = async () => {
+    try {
+      const data = await apiRequest('/api/backup/stats')
+      if (data.success) {
+        setStats(data.data)
+      }
+    } catch (error) {
+      console.error('Error fetching backup stats:', error)
+    }
+  }
+
+  const handleCreateBackup = async (backupData) => {
     try {
       setLoading(true)
-      const data = await apiRequest('/api/backup/create', {
+      const data = await apiRequest('/api/backup', {
         method: 'POST',
-        body: JSON.stringify({ type })
+        body: JSON.stringify(backupData)
       })
       
       if (data.success) {
-        console.log('Backup created successfully')
+        toast.success('✅ تم إنشاء النسخ الاحتياطي بنجاح', {
+          duration: 4000,
+          position: 'top-right'
+        })
         fetchBackups()
+        fetchStats()
+        setShowCreateModal(false)
       }
     } catch (error) {
       console.error('Error creating backup:', error)
+      toast.error('❌ فشل في إنشاء النسخ الاحتياطي')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleDownload = async (backupId, filename) => {
+  const handleDeleteBackup = async (backupId) => {
+    if (!window.confirm('⚠️ هل أنت متأكد من حذف هذا النسخ الاحتياطي؟')) return
+
     try {
       setLoading(true)
-      const data = await apiRequest(`/api/backup/download/${backupId}`)
+      const data = await apiRequest(`/api/backup/${backupId}`, {
+        method: 'DELETE'
+      })
       
-      if (data.success && data.downloadUrl) {
-        window.open(data.downloadUrl, '_blank')
+      if (data.success) {
+        toast.success('🗑️ تم حذف النسخ الاحتياطي بنجاح')
+        fetchBackups()
+        fetchStats()
       }
     } catch (error) {
-      console.error('Error downloading backup:', error)
+      console.error('Error deleting backup:', error)
+      toast.error('❌ فشل في حذف النسخ الاحتياطي')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleDelete = async (backupId) => {
-    if (window.confirm('هل أنت متأكد من حذف هذه النسخة الاحتياطية؟')) {
-      try {
-        setLoading(true)
-        const data = await apiRequest(`/api/backup/${backupId}`, {
-          method: 'DELETE'
-        })
-        
-        if (data.success) {
-          fetchBackups()
+  const handleDownloadBackup = async (backup) => {
+    try {
+      setLoading(true)
+      
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      
+      const response = await fetch(
+        `${apiUrl}/api/backup/${backup._id}/download`,
+        {
+          headers: {
+            'x-admin-key': process.env.NEXT_PUBLIC_ADMIN_API_KEY || 'admin123',
+            'Accept': 'application/json'
+          }
         }
-      } catch (error) {
-        console.error('Error deleting backup:', error)
-      } finally {
-        setLoading(false)
+      )
+
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status}`);
       }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = backup.filename.replace('.enc', '') + '.json'
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast.success('📥 بدأ تحميل النسخ الاحتياطي')
+    } catch (error) {
+      console.error('Error downloading backup:', error)
+      toast.error('❌ فشل في تحميل النسخ الاحتياطي')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleRestore = (backup) => {
+  const handleRestoreBackup = (backup) => {
     setSelectedBackup(backup)
     setShowRestoreModal(true)
   }
 
-  const confirmRestore = async (backup) => {
-    try {
-      setLoading(true)
-      const data = await apiRequest(`/api/backup/restore/${backup._id}`, {
-        method: 'POST'
-      })
+  const handlePageChange = (newPage) => {
+    setPagination(prev => ({ ...prev, page: newPage }))
+  }
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'backups':
+        return (
+          <div className="space-y-6">
+            {stats && <PremiumBackupStats stats={stats} />}
+            
+            <div className="rounded-2xl border overflow-hidden shadow-2xl" style={{ 
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+              boxShadow: '0 10px 40px rgba(0, 0, 0, 0.2)'
+            }}>
+              <div className="p-6 border-b flex items-center justify-between" style={{ borderColor: colors.border }}>
+                <div>
+                  <h3 className="text-lg font-bold" style={{ color: colors.text }}>النسخ الاحتياطية</h3>
+                  <p className="text-sm mt-1" style={{ color: colors.textLight }}>
+                    جميع النسخ الاحتياطية المخزنة محلياً
+                  </p>
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="py-12">
+                  <LoadingSpinner />
+                </div>
+              ) : (
+                <PremiumBackupList 
+                  backups={backups}
+                  pagination={pagination}
+                  onDelete={handleDeleteBackup}
+                  onDownload={handleDownloadBackup}
+                  onRestore={handleRestoreBackup}
+                  onPageChange={handlePageChange}
+                />
+              )}
+            </div>
+          </div>
+        )
       
-      if (data.success) {
-        console.log('Backup restored successfully')
-        setShowRestoreModal(false)
-        setSelectedBackup(null)
-      }
-    } catch (error) {
-      console.error('Error restoring backup:', error)
-    } finally {
-      setLoading(false)
+      case 'settings':
+        return <BackupSettings />
+      
+      case 'health':
+        return <BackupHealth stats={stats} backups={backups} />
+      
+      default:
+        return (
+          <div className="space-y-6">
+            {stats && <PremiumBackupStats stats={stats} />}
+          </div>
+        )
     }
   }
 
   return (
     <div className="space-y-6">
-      {/* Backup Actions */}
-      <div className="rounded-2xl border p-6 shadow-xl" style={{ 
-        borderColor: colors.border,
-        backgroundColor: colors.surface
-      }}>
-        <h3 className="text-lg font-bold mb-4" style={{ color: colors.text }}>النسخ الاحتياطي</h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Premium Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <IconShieldCheck className="w-10 h-10" style={{ color: colors.primary }} />
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                نظام النسخ الاحتياطي
+              </h1>
+              <p className="text-sm mt-1" style={{ color: colors.textLight }}>
+                نظام حماية متكامل لبياناتك مع تشفير AES-256 ومتابعة ذكية
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
           <button
-            onClick={() => handleCreateBackup('full')}
-            disabled={loading}
-            className="p-4 rounded-xl border hover:transform hover:scale-[1.02] transition-all text-right group disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => setShowCreateModal(true)}
+            className="px-6 py-3 rounded-xl text-sm font-semibold hover:opacity-90 transition-all hover:scale-105 active:scale-95 shadow-2xl flex items-center gap-3 group"
             style={{ 
-              borderColor: colors.borderLight,
-              backgroundColor: colors.surfaceLight,
-              backgroundImage: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(99, 102, 241, 0.05) 100%)'
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: '#FFFFFF'
             }}
           >
-            <div className="flex items-center justify-between mb-2">
-              <svg className="w-6 h-6 group-hover:text-indigo-400 transition-colors" style={{ color: colors.primary }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <div className="font-semibold mb-1 group-hover:text-indigo-300 transition-colors" style={{ color: colors.text }}>نسخة احتياطية كاملة</div>
-            <div className="text-sm group-hover:text-indigo-200 transition-colors" style={{ color: colors.textMuted }}>جميع البيانات (مرضى + مواعيد)</div>
-          </button>
-          
-          <button
-            onClick={() => handleCreateBackup('patients')}
-            disabled={loading}
-            className="p-4 rounded-xl border hover:transform hover:scale-[1.02] transition-all text-right group disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ 
-              borderColor: colors.borderLight,
-              backgroundColor: colors.surfaceLight,
-              backgroundImage: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%)'
-            }}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <svg className="w-6 h-6 group-hover:text-emerald-400 transition-colors" style={{ color: colors.success }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </div>
-            <div className="font-semibold mb-1 group-hover:text-emerald-300 transition-colors" style={{ color: colors.text }}>نسخة المرضى فقط</div>
-            <div className="text-sm group-hover:text-emerald-200 transition-colors" style={{ color: colors.textMuted }}>بيانات المرضى فقط</div>
-          </button>
-          
-          <button
-            onClick={() => handleCreateBackup('appointments')}
-            disabled={loading}
-            className="p-4 rounded-xl border hover:transform hover:scale-[1.02] transition-all text-right group disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ 
-              borderColor: colors.borderLight,
-              backgroundColor: colors.surfaceLight,
-              backgroundImage: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%)'
-            }}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <svg className="w-6 h-6 group-hover:text-yellow-400 transition-colors" style={{ color: colors.warning }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
-            <div className="font-semibold mb-1 group-hover:text-yellow-300 transition-colors" style={{ color: colors.text }}>نسخة المواعيد فقط</div>
-            <div className="text-sm group-hover:text-yellow-200 transition-colors" style={{ color: colors.textMuted }}>بيانات المواعيد فقط</div>
+            <IconCloudArrowDown className="w-5 h-5 group-hover:rotate-180 transition-transform" />
+            إنشاء نسخة احتياطية جديدة
           </button>
         </div>
       </div>
 
-      {loading ? (
-        <LoadingSpinner />
-      ) : (
-        <BackupTable 
-          backups={backups}
-          pagination={pagination}
-          onPageChange={(page) => setPagination({...pagination, page})}
-          onDownload={handleDownload}
-          onRestore={handleRestore}
-          onDelete={handleDelete}
+      {/* Premium Tabs */}
+      <div className="flex items-center gap-2 p-1 rounded-2xl" style={{ 
+        backgroundColor: colors.surfaceLight,
+        border: `1px solid ${colors.border}`
+      }}>
+        {[
+          { id: 'backups', label: 'النسخ الاحتياطية', icon: IconDatabase },
+          { id: 'settings', label: 'الإعدادات', icon: IconCog },
+          { id: 'health', label: 'صحة النظام', icon: IconHeart }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex-1 px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center justify-center gap-2 ${
+              activeTab === tab.id ? 'shadow-lg' : 'hover:opacity-90'
+            }`}
+            style={activeTab === tab.id ? {
+              background: colors.gradientPrimary,
+              color: '#FFFFFF',
+              transform: 'translateY(-2px)'
+            } : {
+              color: colors.textLight
+            }}
+          >
+            <tab.icon className="w-5 h-5" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      {renderContent()}
+
+      {/* Premium Modals */}
+      {showCreateModal && (
+        <PremiumCreateBackupModal
+          onClose={() => setShowCreateModal(false)}
+          onCreate={handleCreateBackup}
+          loading={loading}
         />
       )}
 
-      {showRestoreModal && (
-        <RestoreModal
+      {showRestoreModal && selectedBackup && (
+        <PremiumRestoreModal
           backup={selectedBackup}
           onClose={() => {
             setShowRestoreModal(false)
             setSelectedBackup(null)
           }}
-          onConfirm={confirmRestore}
+          onRestore={fetchBackups}
+          loading={loading}
         />
       )}
     </div>

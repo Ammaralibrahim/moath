@@ -191,7 +191,7 @@ const exportPatients = async () => {
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute('download', `patients-backup-${new Date().toISOString().split('T')[0]}.csv`)
+      link.setAttribute('download', `patients-export-${new Date().toISOString().split('T')[0]}.csv`) 
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -204,38 +204,7 @@ const exportPatients = async () => {
     }
   }
 
-  const backupDatabase = async () => {
-  try {
-    setMessage({ type: 'info', text: 'جاري إنشاء نسخة احتياطية...' })
-    
-    const adminKey = process.env.NEXT_PUBLIC_ADMIN_KEY || 'admin123'
-    
-    const response = await fetch(`${API_BASE_URL}/api/backup/create`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-key': adminKey
-      }
-    })
-      
-      if (!response.ok) throw new Error('Backup failed')
-      
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', `database-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      
-      setMessage({ type: 'success', text: 'تم إنشاء نسخة احتياطية بنجاح' })
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000)
-    } catch (error) {
-      console.error('Backup error:', error)
-      setMessage({ type: 'error', text: 'فشل في إنشاء النسخة الاحتياطية' })
-    }
-  }
+
 
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }))
@@ -481,19 +450,7 @@ const exportPatients = async () => {
             </div>
             
             <div className="flex items-center gap-2 sm:gap-3">
-              <button
-                onClick={backupDatabase}
-                className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-1 sm:gap-2 hover:opacity-90 shadow-lg cursor-pointer"
-                style={{ 
-                  background: colors.gradientWarning,
-                  color: '#FFFFFF'
-                }}
-              >
-                <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                </svg>
-                <span className="hidden sm:inline">نسخة احتياطية</span>
-              </button>
+
               <button
                 onClick={exportPatients}
                 className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-1 sm:gap-2 hover:opacity-90 shadow-lg cursor-pointer"
@@ -814,19 +771,7 @@ const exportPatients = async () => {
                   <span className="hidden sm:inline">إضافة مريض</span>
                 </button>
                 
-                <button 
-                  onClick={backupDatabase}
-                  className="px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 hover:opacity-90 transition-opacity shadow-sm cursor-pointer"
-                  style={{ 
-                    background: colors.gradientWarning,
-                    color: '#FFFFFF'
-                  }}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                  </svg>
-                  <span className="hidden sm:inline">نسخة احتياطية</span>
-                </button>
+
               </div>
             </div>
 

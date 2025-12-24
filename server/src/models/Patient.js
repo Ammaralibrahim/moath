@@ -99,10 +99,6 @@ const PatientSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
-  backupId: {
-    type: String,
-    default: () => uuidv4(),
-  },
 });
 
 PatientSchema.index({

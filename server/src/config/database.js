@@ -5,10 +5,15 @@ const MONGODB_URI =
 
 mongoose
   .connect(MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 45000,
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  maxPoolSize: 50, // Maksimum bağlantı sayısını artır
+  serverSelectionTimeoutMS: 30000, // 30 saniye
+  socketTimeoutMS: 60000, // 60 saniye
+  connectTimeoutMS: 30000, // 30 saniye
+  retryWrites: true,
+  retryReads: true,
+  w: 'majority'
   })
   .then(() => {
     console.log("✅ MongoDB bağlantısı başarılı");

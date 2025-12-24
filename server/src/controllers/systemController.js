@@ -1,16 +1,12 @@
 const mongoose = require("mongoose");
 const Patient = require("../models/Patient");
 const Appointment = require("../models/Appointment");
-const Backup = require("../models/Backup");
-
 exports.healthCheck = async (req, res) => {
   try {
     const dbStatus =
       mongoose.connection.readyState === 1 ? "connected" : "disconnected";
     const patientCount = await Patient.countDocuments();
     const appointmentCount = await Appointment.countDocuments();
-    const backupCount = await Backup.countDocuments();
-    const activeBackups = await Backup.countDocuments({ status: "success" });
 
     res.json({
       success: true,
@@ -20,8 +16,6 @@ exports.healthCheck = async (req, res) => {
       stats: {
         patients: patientCount,
         appointments: appointmentCount,
-        backups: backupCount,
-        activeBackups,
       },
       environment: process.env.NODE_ENV || "development",
       uptime: process.uptime(),
@@ -38,15 +32,6 @@ exports.healthCheck = async (req, res) => {
 exports.getSystemInfo = async (req, res) => {
   try {
     const stats = await mongoose.connection.db.stats();
-    const backupStats = await Backup.aggregate([
-      {
-        $group: {
-          _id: "$type",
-          count: { $sum: 1 },
-          totalSize: { $sum: "$size" },
-        },
-      },
-    ]);
 
     res.json({
       success: true,
@@ -61,7 +46,6 @@ exports.getSystemInfo = async (req, res) => {
           indexes: stats.indexes,
           indexSize: stats.indexSize,
         },
-        backups: backupStats,
         server: {
           platform: process.platform,
           arch: process.arch,

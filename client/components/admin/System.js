@@ -81,13 +81,7 @@ export default function System({ systemStats }) {
             <div className="text-sm font-medium" style={{ color: colors.text }}>عدد المواعيد</div>
           </div>
           
-          <div className="p-4 rounded-xl border text-center" style={{ 
-            borderColor: colors.warning + '40',
-            backgroundColor: colors.warning + '10'
-          }}>
-            <div className="text-2xl font-bold mb-2" style={{ color: colors.warning }}>{systemStats.backups?.length || 0}</div>
-            <div className="text-sm font-medium" style={{ color: colors.text }}>النسخ الاحتياطية</div>
-          </div>
+
         </div>
       </div>
     </div>

@@ -84,7 +84,7 @@ exports.getAllPatients = async (req, res) => {
       .sort(sort)
       .skip(skip)
       .limit(parseInt(limit))
-      .select("-__v -backupId");
+      .select("-__v");
 
     const total = await Patient.countDocuments(query);
 
@@ -115,7 +115,7 @@ exports.getAllPatients = async (req, res) => {
 exports.getPatientById = async (req, res) => {
   try {
     const patient = await Patient.findById(req.params.id).select(
-      "-__v -backupId"
+      "-__v"
     );
 
     if (!patient) {

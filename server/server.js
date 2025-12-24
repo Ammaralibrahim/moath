@@ -43,9 +43,7 @@ mongoose
     process.exit(1);
   });
 
-// Ensure backup directory exists
-const backupDir = path.join(__dirname, "backups");
-fs.mkdir(backupDir, { recursive: true }).catch(console.error);
+
 
 // Enhanced Appointment Schema
 const AppointmentSchema = new mongoose.Schema({
@@ -224,10 +222,6 @@ const PatientSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
-  backupId: {
-    type: String,
-    default: () => uuidv4(),
-  },
 });
 
 PatientSchema.index({
@@ -266,54 +260,7 @@ PatientSchema.virtual("age").get(function () {
 
 const Patient = mongoose.model("Patient", PatientSchema);
 
-// Backup Schema for tracking backups
-const BackupSchema = new mongoose.Schema({
-  filename: {
-    type: String,
-    required: true,
-  },
-  size: {
-    type: Number,
-    required: true,
-  },
-  recordCount: {
-    type: Number,
-    required: true,
-  },
-  type: {
-    type: String,
-    enum: ["full", "partial", "patients", "appointments"],
-    required: true,
-  },
-  status: {
-    type: String,
-    enum: ["success", "failed", "pending"],
-    default: "pending",
-  },
-  backupDate: {
-    type: Date,
-    default: Date.now,
-  },
-  expiresAt: {
-    type: Date,
-    default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-  },
-  metadata: {
-    type: Object,
-    default: {},
-  },
-  downloadCount: {
-    type: Number,
-    default: 0,
-  },
-});
 
-BackupSchema.index({ backupDate: -1 });
-BackupSchema.index({ type: 1 });
-BackupSchema.index({ status: 1 });
-BackupSchema.index({ expiresAt: 1 });
-
-const Backup = mongoose.model("Backup", BackupSchema);
 
 // Admin authentication middleware
 const authenticateAdmin = (req, res, next) => {
@@ -336,8 +283,6 @@ app.get("/api/health", async (req, res) => {
       mongoose.connection.readyState === 1 ? "connected" : "disconnected";
     const patientCount = await Patient.countDocuments();
     const appointmentCount = await Appointment.countDocuments();
-    const backupCount = await Backup.countDocuments();
-    const activeBackups = await Backup.countDocuments({ status: "success" });
 
     res.json({
       success: true,
@@ -347,8 +292,6 @@ app.get("/api/health", async (req, res) => {
       stats: {
         patients: patientCount,
         appointments: appointmentCount,
-        backups: backupCount,
-        activeBackups,
       },
       environment: process.env.NODE_ENV || "development",
       uptime: process.uptime(),
@@ -366,15 +309,6 @@ app.get("/api/health", async (req, res) => {
 app.get("/api/system/info", authenticateAdmin, async (req, res) => {
   try {
     const stats = await mongoose.connection.db.stats();
-    const backupStats = await Backup.aggregate([
-      {
-        $group: {
-          _id: "$type",
-          count: { $sum: 1 },
-          totalSize: { $sum: "$size" },
-        },
-      },
-    ]);
 
     res.json({
       success: true,
@@ -389,7 +323,6 @@ app.get("/api/system/info", authenticateAdmin, async (req, res) => {
           indexes: stats.indexes,
           indexSize: stats.indexSize,
         },
-        backups: backupStats,
         server: {
           platform: process.platform,
           arch: process.arch,
@@ -494,7 +427,7 @@ app.get("/api/patients", authenticateAdmin, async (req, res) => {
       .sort(sort)
       .skip(skip)
       .limit(parseInt(limit))
-      .select("-__v -backupId");
+      .select("-__v");
 
     const total = await Patient.countDocuments(query);
 
@@ -526,7 +459,7 @@ app.get("/api/patients", authenticateAdmin, async (req, res) => {
 app.get("/api/patients/:id", authenticateAdmin, async (req, res) => {
   try {
     const patient = await Patient.findById(req.params.id).select(
-      "-__v -backupId"
+      "-__v"
     );
 
     if (!patient) {
@@ -740,7 +673,7 @@ app.post("/api/patients/bulk-delete", authenticateAdmin, async (req, res) => {
 app.get("/api/patients/export", authenticateAdmin, async (req, res) => {
   try {
     const { format = "csv", includeAppointments = "false" } = req.query;
-    const patients = await Patient.find().select("-__v -backupId");
+    const patients = await Patient.find().select("-__v");
 
     if (patients.length === 0) {
       return res.status(404).json({
@@ -757,15 +690,7 @@ app.get("/api/patients/export", authenticateAdmin, async (req, res) => {
         return patientObj;
       });
 
-      const backup = new Backup({
-        filename: `patients-export-${Date.now()}.json`,
-        size: Buffer.from(JSON.stringify(patientsWithAge)).length,
-        recordCount: patients.length,
-        type: "patients",
-        status: "success",
-        metadata: { format: "json", includeAppointments },
-      });
-      await backup.save();
+
 
       res.setHeader("Content-Type", "application/json");
       res.setHeader(
@@ -814,15 +739,7 @@ app.get("/api/patients/export", authenticateAdmin, async (req, res) => {
         csvStringifier.stringifyRecords(patientsWithAge);
       const csvBuffer = Buffer.from(`\uFEFF${csvString}`, "utf8");
 
-      const backup = new Backup({
-        filename: `patients-export-${Date.now()}.csv`,
-        size: csvBuffer.length,
-        recordCount: patients.length,
-        type: "patients",
-        status: "success",
-        metadata: { format: "csv", includeAppointments },
-      });
-      await backup.save();
+
 
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader(
@@ -836,15 +753,7 @@ app.get("/api/patients/export", authenticateAdmin, async (req, res) => {
   } catch (error) {
     console.error("Error exporting patients:", error);
 
-    const backup = new Backup({
-      filename: `patients-export-failed-${Date.now()}`,
-      size: 0,
-      recordCount: 0,
-      type: "patients",
-      status: "failed",
-      metadata: { error: error.message },
-    });
-    await backup.save();
+
 
     res.status(500).json({
       success: false,
@@ -983,398 +892,7 @@ app.get("/api/patients/search/:query", authenticateAdmin, async (req, res) => {
   }
 });
 
-// ==================== BACKUP SYSTEM ENDPOINTS ====================
 
-// Create full database backup
-app.post("/api/backup/create", authenticateAdmin, async (req, res) => {
-  try {
-    const { type = "full", includeMetadata = true } = req.body;
-    const timestamp = Date.now();
-    const filename = `backup-${type}-${timestamp}.json`;
-    const filepath = path.join(backupDir, filename);
-
-    let backupData = {};
-    const metadata = {
-      timestamp,
-      type,
-      database: mongoose.connection.name,
-      version: "1.0",
-    };
-
-    // Collect data based on type
-    switch (type) {
-      case "full":
-        backupData.patients = await Patient.find().lean();
-        backupData.appointments = await Appointment.find().lean();
-        break;
-      case "patients":
-        backupData.patients = await Patient.find().lean();
-        break;
-      case "appointments":
-        backupData.appointments = await Appointment.find().lean();
-        break;
-      default:
-        throw new Error("نوع النسخ الاحتياطي غير معروف");
-    }
-
-    if (includeMetadata) {
-      backupData.metadata = metadata;
-      backupData.stats = {
-        patients: backupData.patients ? backupData.patients.length : 0,
-        appointments: backupData.appointments
-          ? backupData.appointments.length
-          : 0,
-        backupDate: new Date().toISOString(),
-      };
-    }
-
-    // Write to file
-    const dataString = JSON.stringify(backupData, null, 2);
-    await fs.writeFile(filepath, dataString, "utf8");
-
-    const stats = await fs.stat(filepath);
-
-    // Create backup record in database
-    const backup = new Backup({
-      filename,
-      size: stats.size,
-      recordCount:
-        (backupData.patients?.length || 0) +
-        (backupData.appointments?.length || 0),
-      type,
-      status: "success",
-      metadata: {
-        ...metadata,
-        filepath,
-      },
-    });
-    await backup.save();
-
-    // Clean old backups (keep last 10)
-    const oldBackups = await Backup.find({
-      status: "success",
-      expiresAt: { $lt: new Date() },
-    }).sort({ backupDate: 1 });
-
-    for (const oldBackup of oldBackups.slice(
-      0,
-      Math.max(0, oldBackups.length - 10)
-    )) {
-      try {
-        const oldFilepath = path.join(backupDir, oldBackup.filename);
-        await fs.unlink(oldFilepath);
-        await oldBackup.deleteOne();
-      } catch (err) {
-        console.error("Error deleting old backup:", err);
-      }
-    }
-
-    res.json({
-      success: true,
-      message: "تم إنشاء النسخة الاحتياطية بنجاح",
-      data: {
-        filename,
-        size: stats.size,
-        downloadUrl: `/api/backup/download/${backup._id}`,
-        expiresAt: backup.expiresAt,
-      },
-    });
-  } catch (error) {
-    console.error("Error creating backup:", error);
-
-    // Log failed backup attempt
-    const backup = new Backup({
-      filename: `failed-backup-${Date.now()}`,
-      size: 0,
-      recordCount: 0,
-      type: req.body.type || "full",
-      status: "failed",
-      metadata: { error: error.message },
-    });
-    await backup.save();
-
-    res.status(500).json({
-      success: false,
-      message: "فشل في إنشاء النسخة الاحتياطية",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
-  }
-});
-
-// Download backup
-app.get("/api/backup/download/:id", authenticateAdmin, async (req, res) => {
-  try {
-    const backup = await Backup.findById(req.params.id);
-
-    if (!backup) {
-      return res.status(404).json({
-        success: false,
-        message: "النسخة الاحتياطية غير موجودة",
-      });
-    }
-
-    const filepath = path.join(backupDir, backup.filename);
-
-    try {
-      await fs.access(filepath);
-    } catch {
-      return res.status(404).json({
-        success: false,
-        message: "ملف النسخة الاحتياطية غير موجود",
-      });
-    }
-
-    // Update download count
-    backup.downloadCount += 1;
-    await backup.save();
-
-    res.setHeader("Content-Type", "application/json");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${backup.filename}"`
-    );
-    res.sendFile(filepath);
-  } catch (error) {
-    console.error("Error downloading backup:", error);
-    res.status(500).json({
-      success: false,
-      message: "فشل في تحميل النسخة الاحتياطية",
-    });
-  }
-});
-
-// List all backups
-app.get("/api/backup/list", authenticateAdmin, async (req, res) => {
-  try {
-    const { type, status, page = 1, limit = 20 } = req.query;
-    const skip = (page - 1) * limit;
-
-    let query = {};
-    if (type) query.type = type;
-    if (status) query.status = status;
-
-    const backups = await Backup.find(query)
-      .sort({ backupDate: -1 })
-      .skip(skip)
-      .limit(parseInt(limit))
-      .select("-__v");
-
-    const total = await Backup.countDocuments(query);
-
-    // Check if backup files still exist
-    const backupsWithStatus = await Promise.all(
-      backups.map(async (backup) => {
-        const backupObj = backup.toObject();
-        try {
-          const filepath = path.join(backupDir, backup.filename);
-          await fs.access(filepath);
-          backupObj.fileExists = true;
-        } catch {
-          backupObj.fileExists = false;
-        }
-        return backupObj;
-      })
-    );
-
-    res.json({
-      success: true,
-      data: backupsWithStatus,
-      total,
-      page: parseInt(page),
-      totalPages: Math.ceil(total / limit),
-    });
-  } catch (error) {
-    console.error("Error listing backups:", error);
-    res.status(500).json({
-      success: false,
-      message: "فشل في جلب قائمة النسخ الاحتياطية",
-    });
-  }
-});
-
-// Restore from backup
-app.post("/api/backup/restore/:id", authenticateAdmin, async (req, res) => {
-  try {
-    const backup = await Backup.findById(req.params.id);
-
-    if (!backup) {
-      return res.status(404).json({
-        success: false,
-        message: "النسخة الاحتياطية غير موجودة",
-      });
-    }
-
-    const filepath = path.join(backupDir, backup.filename);
-    const data = await fs.readFile(filepath, "utf8");
-    const backupData = JSON.parse(data);
-
-    // Start restoration process
-    let restoredCount = 0;
-
-    if (backupData.patients) {
-      // Clear existing patients
-      if (req.query.clearExisting === "true") {
-        await Patient.deleteMany({});
-      }
-
-      // Restore patients
-      for (const patientData of backupData.patients) {
-        // Remove _id to avoid duplicate key error
-        const { _id, ...cleanData } = patientData;
-        const patient = new Patient(cleanData);
-        await patient.save();
-        restoredCount++;
-      }
-    }
-
-    if (backupData.appointments) {
-      // Clear existing appointments
-      if (req.query.clearExisting === "true") {
-        await Appointment.deleteMany({});
-      }
-
-      // Restore appointments
-      for (const appointmentData of backupData.appointments) {
-        const { _id, ...cleanData } = appointmentData;
-        const appointment = new Appointment(cleanData);
-        await appointment.save();
-        restoredCount++;
-      }
-    }
-
-    // Create restoration record
-    const restorationRecord = new Backup({
-      filename: `restoration-${backup.filename}`,
-      size: backup.size,
-      recordCount: restoredCount,
-      type: "restoration",
-      status: "success",
-      metadata: {
-        originalBackup: backup._id,
-        restoredAt: new Date().toISOString(),
-        clearExisting: req.query.clearExisting === "true",
-      },
-    });
-    await restorationRecord.save();
-
-    res.json({
-      success: true,
-      message: `تم استعادة ${restoredCount} سجل بنجاح`,
-      data: {
-        restoredCount,
-        restorationId: restorationRecord._id,
-      },
-    });
-  } catch (error) {
-    console.error("Error restoring backup:", error);
-
-    // Log failed restoration
-    const restorationRecord = new Backup({
-      filename: `failed-restoration-${Date.now()}`,
-      size: 0,
-      recordCount: 0,
-      type: "restoration",
-      status: "failed",
-      metadata: { error: error.message },
-    });
-    await restorationRecord.save();
-
-    res.status(500).json({
-      success: false,
-      message: "فشل في استعادة النسخة الاحتياطية",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
-  }
-});
-
-// Delete backup
-app.delete("/api/backup/:id", authenticateAdmin, async (req, res) => {
-  try {
-    const backup = await Backup.findById(req.params.id);
-
-    if (!backup) {
-      return res.status(404).json({
-        success: false,
-        message: "النسخة الاحتياطية غير موجودة",
-      });
-    }
-
-    // Delete file
-    const filepath = path.join(backupDir, backup.filename);
-    try {
-      await fs.unlink(filepath);
-    } catch (error) {
-      console.warn("Backup file not found, deleting record only:", error);
-    }
-
-    // Delete record
-    await backup.deleteOne();
-
-    res.json({
-      success: true,
-      message: "تم حذف النسخة الاحتياطية بنجاح",
-    });
-  } catch (error) {
-    console.error("Error deleting backup:", error);
-    res.status(500).json({
-      success: false,
-      message: "فشل في حذف النسخة الاحتياطية",
-    });
-  }
-});
-
-// Get backup statistics
-app.get("/api/backup/stats", authenticateAdmin, async (req, res) => {
-  try {
-    const totalBackups = await Backup.countDocuments();
-    const successfulBackups = await Backup.countDocuments({
-      status: "success",
-    });
-    const totalSize = await Backup.aggregate([
-      { $match: { status: "success" } },
-      { $group: { _id: null, total: { $sum: "$size" } } },
-    ]);
-
-    const recentBackups = await Backup.find({ status: "success" })
-      .sort({ backupDate: -1 })
-      .limit(5)
-      .select("filename size backupDate type");
-
-    const typeDistribution = await Backup.aggregate([
-      { $group: { _id: "$type", count: { $sum: 1 } } },
-    ]);
-
-    res.json({
-      success: true,
-      data: {
-        totalBackups,
-        successfulBackups,
-        totalSize: totalSize[0]?.total || 0,
-        recentBackups,
-        typeDistribution,
-        backupDir,
-        freeSpace: await getFreeSpace(backupDir),
-      },
-    });
-  } catch (error) {
-    console.error("Error getting backup stats:", error);
-    res.status(500).json({
-      success: false,
-      message: "فشل في جلب إحصائيات النسخ الاحتياطي",
-    });
-  }
-});
-
-// Helper function to get free space
-async function getFreeSpace(dir) {
-  try {
-    const stats = await fs.stat(dir);
-    // This is a simplified version - in production you might want to use a system call
-    return "N/A";
-  } catch {
-    return "N/A";
-  }
-}
 
 // ==================== EXISTING APPOINTMENT ENDPOINTS (UPDATED) ====================
 
@@ -1665,35 +1183,11 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Sunucu ${PORT} portunda çalışıyor.`);
   console.log(`📊 API URL: http://localhost:${PORT}`);
   console.log(`🔑 Admin Key: ${process.env.ADMIN_API_KEY || "admin123"}`);
-  console.log(`💾 Backup Directory: ${backupDir}`);
 });
 
 // Graceful shutdown
 process.on("SIGTERM", async () => {
   console.log("SIGTERM received, shutting down gracefully...");
-
-  // Create emergency backup
-  try {
-    const timestamp = Date.now();
-    const filename = `emergency-backup-${timestamp}.json`;
-    const filepath = path.join(backupDir, filename);
-
-    const backupData = {
-      patients: await Patient.find().lean(),
-      appointments: await Appointment.find().lean(),
-      metadata: {
-        type: "emergency",
-        timestamp,
-        reason: "shutdown",
-      },
-    };
-
-    await fs.writeFile(filepath, JSON.stringify(backupData, null, 2));
-    console.log(`Emergency backup created: ${filename}`);
-  } catch (error) {
-    console.error("Failed to create emergency backup:", error);
-  }
-
   await mongoose.connection.close();
   console.log("MongoDB connection closed");
   process.exit(0);

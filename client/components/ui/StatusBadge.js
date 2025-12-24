@@ -3,24 +3,56 @@
 import { colors } from '@/components/shared/constants'
 
 export default function StatusBadge({ status }) {
-  const config = {
-    pending: { color: colors.warning, text: 'قيد الانتظار', gradient: colors.gradientWarning },
-    confirmed: { color: colors.success, text: 'مؤكد', gradient: colors.gradientSuccess },
-    cancelled: { color: colors.error, text: 'ملغى', gradient: colors.gradientError }
+  const getStatusConfig = (status) => {
+    switch (status) {
+      case 'success':
+      case 'confirmed':
+      case 'active':
+        return {
+          text: status === 'success' ? 'ناجح' : status === 'confirmed' ? 'مؤكد' : 'نشط',
+          bgColor: 'bg-emerald-500/20',
+          textColor: 'text-emerald-400',
+          dotColor: 'bg-emerald-500'
+        }
+      case 'pending':
+        return {
+          text: 'قيد الانتظار',
+          bgColor: 'bg-yellow-500/20',
+          textColor: 'text-yellow-400',
+          dotColor: 'bg-yellow-500'
+        }
+      case 'failed':
+      case 'cancelled':
+      case 'error':
+        return {
+          text: status === 'failed' ? 'فشل' : status === 'cancelled' ? 'ملغي' : 'خطأ',
+          bgColor: 'bg-rose-500/20',
+          textColor: 'text-rose-400',
+          dotColor: 'bg-rose-500'
+        }
+      case 'restored':
+        return {
+          text: 'تم الاستعادة',
+          bgColor: 'bg-blue-500/20',
+          textColor: 'text-blue-400',
+          dotColor: 'bg-blue-500'
+        }
+      default:
+        return {
+          text: status,
+          bgColor: 'bg-gray-500/20',
+          textColor: 'text-gray-400',
+          dotColor: 'bg-gray-500'
+        }
+    }
   }
-  
-  const { color, text, gradient } = config[status] || config.pending
-  
+
+  const config = getStatusConfig(status)
+
   return (
-    <span
-      className="px-3 py-1.5 rounded-xl text-xs font-semibold shadow-sm cursor-default"
-      style={{ 
-        background: gradient,
-        color: '#FFFFFF',
-        border: `1px solid ${color}40`
-      }}
-    >
-      {text}
-    </span>
+    <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${config.bgColor} ${config.textColor}`}>
+      <div className={`w-1.5 h-1.5 rounded-full ${config.dotColor}`}></div>
+      {config.text}
+    </div>
   )
 }

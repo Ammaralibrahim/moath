@@ -4,7 +4,6 @@ const patientController = require("../controllers/patientController");
 const fs = require("fs").promises;
 const path = require("path");
 const { createObjectCsvStringifier } = require("csv-writer");
-const Backup = require("../models/Backup");
 
 // Hasta rotaları
 router.get("/", patientController.getAllPatients);
@@ -20,7 +19,7 @@ router.post("/bulk-delete", patientController.bulkDeletePatients);
 router.get("/export", async (req, res) => {
   try {
     const { format = "csv", includeAppointments = "false" } = req.query;
-    const patients = await require("../models/Patient").find().select("-__v -backupId");
+    const patients = await require("../models/Patient").find().select("-__v");
 
     if (patients.length === 0) {
       return res.status(404).json({
@@ -36,16 +35,6 @@ router.get("/export", async (req, res) => {
         patientObj.age = patient.age;
         return patientObj;
       });
-
-      const backup = new Backup({
-        filename: `patients-export-${Date.now()}.json`,
-        size: Buffer.from(JSON.stringify(patientsWithAge)).length,
-        recordCount: patients.length,
-        type: "patients",
-        status: "success",
-        metadata: { format: "json", includeAppointments },
-      });
-      await backup.save();
 
       res.setHeader("Content-Type", "application/json");
       res.setHeader(
@@ -94,16 +83,6 @@ router.get("/export", async (req, res) => {
         csvStringifier.stringifyRecords(patientsWithAge);
       const csvBuffer = Buffer.from(`\uFEFF${csvString}`, "utf8");
 
-      const backup = new Backup({
-        filename: `patients-export-${Date.now()}.csv`,
-        size: csvBuffer.length,
-        recordCount: patients.length,
-        type: "patients",
-        status: "success",
-        metadata: { format: "csv", includeAppointments },
-      });
-      await backup.save();
-
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader(
         "Content-Disposition",
@@ -116,15 +95,6 @@ router.get("/export", async (req, res) => {
   } catch (error) {
     console.error("Error exporting patients:", error);
 
-    const backup = new Backup({
-      filename: `patients-export-failed-${Date.now()}`,
-      size: 0,
-      recordCount: 0,
-      type: "patients",
-      status: "failed",
-      metadata: { error: error.message },
-    });
-    await backup.save();
 
     res.status(500).json({
       success: false,
