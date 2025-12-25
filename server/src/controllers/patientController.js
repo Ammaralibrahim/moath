@@ -1,6 +1,6 @@
 const Patient = require("../models/Patient");
 const Appointment = require("../models/Appointment");
-
+// getAllPatients fonksiyonuna ek validasyon
 exports.getAllPatients = async (req, res) => {
   try {
     const {
@@ -16,101 +16,144 @@ exports.getAllPatients = async (req, res) => {
       sortOrder = "desc",
     } = req.query;
 
-    const skip = (page - 1) * limit;
+    // Parametre validasyonu
+    const validatedPage = Math.max(1, parseInt(page) || 1)
+    const validatedLimit = Math.min(100, Math.max(1, parseInt(limit) || 10))
+    
+    const skip = (validatedPage - 1) * validatedLimit
     let query = {};
 
-    // Search filter
-    if (search) {
-      query.$or = [
-        { patientName: { $regex: search, $options: "i" } },
-        { phoneNumber: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-      ];
-    }
-
-    // Gender filter
-    if (gender) {
-      query.gender = gender;
-    }
-
-    // Age filter
-    if (minAge || maxAge) {
-      const today = new Date();
-      const minBirthDate = maxAge
-        ? new Date(
-            today.getFullYear() - maxAge,
-            today.getMonth(),
-            today.getDate()
-          )
-        : null;
-      const maxBirthDate = minAge
-        ? new Date(
-            today.getFullYear() - minAge,
-            today.getMonth(),
-            today.getDate()
-          )
-        : null;
-
-      if (minBirthDate && maxBirthDate) {
-        query.birthDate = { $gte: minBirthDate, $lte: maxBirthDate };
-      } else if (minBirthDate) {
-        query.birthDate = { $gte: minBirthDate };
-      } else if (maxBirthDate) {
-        query.birthDate = { $lte: maxBirthDate };
+    // Search filter - SQL injection koruması
+    if (search && typeof search === 'string') {
+      const safeSearch = search.replace(/[^\w\u0600-\u06FF\s@.-]/g, '')
+      if (safeSearch.length > 0) {
+        query.$or = [
+          { patientName: { $regex: safeSearch, $options: "i" } },
+          { phoneNumber: { $regex: safeSearch, $options: "i" } },
+          { email: { $regex: safeSearch, $options: "i" } },
+        ];
       }
     }
 
-    // Has appointments filter
+    // Gender filter - sadece geçerli değerler
+    if (['male', 'female'].includes(gender)) {
+      query.gender = gender;
+    }
+
+    // Age filter - sayısal kontrol
+    if (minAge || maxAge) {
+      const today = new Date();
+      const minAgeNum = parseInt(minAge)
+      const maxAgeNum = parseInt(maxAge)
+      
+      if (minAgeNum && !isNaN(minAgeNum) && minAgeNum >= 0) {
+        const minBirthDate = new Date(
+          today.getFullYear() - minAgeNum,
+          today.getMonth(),
+          today.getDate()
+        );
+        query.birthDate = { ...query.birthDate, $lte: minBirthDate };
+      }
+      
+      if (maxAgeNum && !isNaN(maxAgeNum) && maxAgeNum >= 0) {
+        const maxBirthDate = new Date(
+          today.getFullYear() - maxAgeNum,
+          today.getMonth(),
+          today.getDate()
+        );
+        query.birthDate = { ...query.birthDate, $gte: maxBirthDate };
+      }
+    }
+
+    // Has appointments filter - boolean kontrol
     if (hasAppointments === "true") {
       query.appointmentCount = { $gt: 0 };
     } else if (hasAppointments === "false") {
       query.appointmentCount = 0;
     }
 
-    // Last visit filter
+    // Tarih formatı doğrulama
     if (lastVisit) {
       const date = new Date(lastVisit);
-      const nextDay = new Date(date);
-      nextDay.setDate(nextDay.getDate() + 1);
-      query.lastVisit = { $gte: date, $lt: nextDay };
+      if (!isNaN(date.getTime())) {
+        const nextDay = new Date(date);
+        nextDay.setDate(nextDay.getDate() + 1);
+        query.lastVisit = { $gte: date, $lt: nextDay };
+      }
     }
 
-    // Sort
+    // Sort alanı doğrulama
+    const allowedSortFields = ['patientName', 'createdAt', 'lastVisit', 'appointmentCount', 'birthDate']
+    const sortField = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt'
+    const sortOrderValue = sortOrder === 'asc' ? 1 : -1
+    
     const sort = {};
-    sort[sortBy] = sortOrder === "desc" ? -1 : 1;
+    sort[sortField] = sortOrderValue;
 
-    // Get patients
-    const patients = await Patient.find(query)
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit))
-      .select("-__v");
+    // Toplam sayıyı ve hastaları al
+    const [total, patients] = await Promise.all([
+      Patient.countDocuments(query),
+      Patient.find(query)
+        .sort(sort)
+        .skip(skip)
+        .limit(validatedLimit)
+        .select('-__v')
+    ])
 
-    const total = await Patient.countDocuments(query);
-
-    // Calculate age for each patient
+    // Yaş hesapla ve veriyi hazırla
     const patientsWithAge = patients.map((patient) => {
       const patientObj = patient.toObject();
-      patientObj.age = patient.age;
+      patientObj.age = patient.age || null;
+      patientObj.formattedBirthDate = patient.birthDate 
+        ? new Date(patient.birthDate).toISOString().split('T')[0]
+        : null;
+      patientObj.formattedLastVisit = patient.lastVisit
+        ? new Date(patient.lastVisit).toLocaleDateString('ar-SA')
+        : null;
       return patientObj;
     });
 
     res.json({
       success: true,
+      message: "تم تحميل بيانات المرضى بنجاح",
       data: patientsWithAge,
       total,
-      page: parseInt(page),
-      totalPages: Math.ceil(total / limit),
-      hasMore: page * limit < total,
+      page: validatedPage,
+      totalPages: Math.ceil(total / validatedLimit),
+      hasMore: validatedPage * validatedLimit < total,
+      filters: {
+        search: search || null,
+        gender: gender || null,
+        minAge: minAge || null,
+        maxAge: maxAge || null,
+        hasAppointments: hasAppointments || null
+      }
     });
   } catch (error) {
     console.error("Error fetching patients:", error);
+    
+    // Hata türüne göre mesaj
+    if (error.name === 'CastError') {
+      return res.status(400).json({
+        success: false,
+        message: "معايير البحث غير صحيحة",
+        error: {
+          code: 'INVALID_FILTERS'
+        }
+      });
+    }
+    
     res.status(500).json({
       success: false,
-      message: "فشل في جلب بيانات المرضى",
+      message: "فشل في تحميل بيانات المرضى. يرجى المحاولة مرة أخرى",
+      error: {
+        code: 'SERVER_ERROR',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }
     });
   }
 };
+
 
 exports.getPatientById = async (req, res) => {
   try {

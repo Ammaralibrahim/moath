@@ -37,7 +37,7 @@ export default function Header({ activeTab, sidebarOpen, setSidebarOpen }) {
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
+          {/* <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-2">
               <span className="text-sm font-medium text-white/80">عرض:</span>
               <button
@@ -77,7 +77,7 @@ export default function Header({ activeTab, sidebarOpen, setSidebarOpen }) {
               </svg>
               تصدير البيانات
             </button>
-          </div>
+          </div> */}
         </div>
       </div>
     </header>

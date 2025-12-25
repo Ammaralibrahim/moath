@@ -29,11 +29,11 @@ ensureBackupDir();
 function encrypt(text) {
   try {
     const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv("aes-256-gcm", 
-      Buffer.from(ENCRYPTION_KEY.length === 64 ? ENCRYPTION_KEY : 
-        crypto.createHash('sha256').update(ENCRYPTION_KEY).digest('hex'), 
-        "hex"), 
-      iv);
+    const key = ENCRYPTION_KEY.length === 64 ? 
+      Buffer.from(ENCRYPTION_KEY, "hex") : 
+      crypto.createHash('sha256').update(ENCRYPTION_KEY).digest();
+    
+    const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
     let encrypted = cipher.update(text, "utf8", "hex");
     encrypted += cipher.final("hex");
     const authTag = cipher.getAuthTag();
@@ -50,11 +50,13 @@ function encrypt(text) {
 
 function decrypt(encrypted) {
   try {
+    const key = ENCRYPTION_KEY.length === 64 ? 
+      Buffer.from(ENCRYPTION_KEY, "hex") : 
+      crypto.createHash('sha256').update(ENCRYPTION_KEY).digest();
+    
     const decipher = crypto.createDecipheriv(
       "aes-256-gcm",
-      Buffer.from(ENCRYPTION_KEY.length === 64 ? ENCRYPTION_KEY : 
-        crypto.createHash('sha256').update(ENCRYPTION_KEY).digest('hex'), 
-        "hex"),
+      key,
       Buffer.from(encrypted.iv, "hex")
     );
     decipher.setAuthTag(Buffer.from(encrypted.authTag, "hex"));
@@ -104,7 +106,19 @@ exports.createBackup = async (req, res) => {
     
     if (type === "full" || type === "patients") {
       const patients = await Patient.find().lean();
-      backupData.patients = patients;
+      backupData.patients = patients.map(patient => {
+        const { _id, __v, ...rest } = patient;
+        return { 
+          ...rest, 
+          originalId: _id.toString(),
+          // Tüm gerekli alanları ekle
+          patientName: patient.patientName || "غير معروف",
+          phoneNumber: patient.phoneNumber || "0000000000",
+          isActive: patient.isActive !== undefined ? patient.isActive : true,
+          appointmentCount: patient.appointmentCount || 0,
+          totalVisits: patient.totalVisits || 0
+        };
+      });
       backupRecord.metadata.patients = patients.length;
       console.log(`📊 ${patients.length} hasta verisi toplandı`);
     }
@@ -113,17 +127,33 @@ exports.createBackup = async (req, res) => {
       const appointments = await Appointment.find()
         .populate("patientId", "patientName phoneNumber")
         .lean();
-      backupData.appointments = appointments;
+      
+      backupData.appointments = appointments.map(appointment => {
+        const { _id, __v, patientId, ...rest } = appointment;
+        return {
+          ...rest,
+          originalId: _id.toString(),
+          patientName: appointment.patientId?.patientName || "غير معروف",
+          phoneNumber: appointment.patientId?.phoneNumber || "0000000000",
+          // Tarih formatını düzelt
+          appointmentDate: appointment.appointmentDate ? 
+            new Date(appointment.appointmentDate).toISOString() : 
+            new Date().toISOString(),
+          appointmentTime: appointment.appointmentTime || "09:00",
+          status: appointment.status || "معلقة",
+          notes: appointment.notes || ""
+        };
+      });
       backupRecord.metadata.appointments = appointments.length;
       console.log(`📊 ${appointments.length} randevu verisi toplandı`);
     }
 
     // Meta veri ekle
     backupData.metadata = {
-      createdAt: new Date(),
+      createdAt: new Date().toISOString(),
       type,
       database: mongoose.connection.name,
-      version: "1.0",
+      version: "2.0", // Version güncelle
       totalRecords: (backupData.patients?.length || 0) + (backupData.appointments?.length || 0)
     };
 
@@ -144,7 +174,7 @@ exports.createBackup = async (req, res) => {
     backupRecord.size = stats.size;
     backupRecord.status = "success";
     backupRecord.metadata.database = mongoose.connection.name;
-    backupRecord.metadata.version = "1.0";
+    backupRecord.metadata.version = "2.0";
     
     if (schedule === "daily") {
       backupRecord.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 gün
@@ -220,7 +250,6 @@ exports.listBackups = async (req, res) => {
     });
   }
 };
-
 // Backup indir
 exports.downloadBackup = async (req, res) => {
   try {
@@ -253,10 +282,32 @@ exports.downloadBackup = async (req, res) => {
     const encryptedData = JSON.parse(await fs.readFile(backup.path, "utf8"));
     const decryptedBase64 = decrypt(encryptedData);
     const decompressed = zlib.gunzipSync(Buffer.from(decryptedBase64, "base64"));
+    
+    // JSON doğrulaması
+    const backupData = JSON.parse(decompressed);
+    
+    // Eksik alanları doldur
+    if (backupData.patients) {
+      backupData.patients.forEach(patient => {
+        patient.patientName = patient.patientName || "غير معروف";
+        patient.phoneNumber = patient.phoneNumber || "0000000000";
+      });
+    }
+    
+    if (backupData.appointments) {
+      backupData.appointments.forEach(appointment => {
+        appointment.patientName = appointment.patientName || "غير معروف";
+        appointment.phoneNumber = appointment.phoneNumber || "0000000000";
+        appointment.appointmentTime = appointment.appointmentTime || "09:00";
+        appointment.status = appointment.status || "معلقة";
+      });
+    }
 
+    const cleanData = JSON.stringify(backupData, null, 2);
+    
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Content-Disposition", `attachment; filename="${backup.filename.replace('.enc', '.json')}"`);
-    res.send(decompressed);
+    res.send(cleanData);
   } catch (error) {
     console.error("Backup download error:", error);
     res.status(500).json({
@@ -265,13 +316,12 @@ exports.downloadBackup = async (req, res) => {
     });
   }
 };
-
 // Backup geri yükle
 exports.restoreBackup = async (req, res) => {
   let session;
   try {
     const { id } = req.params;
-    const { mode = "preview" } = req.body; // preview or restore
+    const { mode = "preview" } = req.body;
 
     const backup = await Backup.findById(id);
     if (!backup) {
@@ -281,7 +331,6 @@ exports.restoreBackup = async (req, res) => {
       });
     }
 
-    // Path kontrolü
     if (!backup.path) {
       return res.status(404).json({
         success: false,
@@ -320,11 +369,47 @@ exports.restoreBackup = async (req, res) => {
 
     console.log(`🔄 ${backup.type} backup geri yükleniyor...`);
 
+    // Önce mevcut patientId'leri eşleştir
+    const patientIdMap = new Map();
+    
     if (backup.type === "full" || backup.type === "patients") {
       await Patient.deleteMany({}).session(session);
       if (backupData.patients?.length > 0) {
         console.log(`📥 ${backupData.patients.length} hasta yükleniyor...`);
-        await Patient.insertMany(backupData.patients, { session });
+        
+        // Yeni patientlar oluştur
+        const patientsToInsert = backupData.patients.map(patientData => {
+          const { originalId, ...rest } = patientData;
+          return {
+            ...rest,
+            // Eksik alanları doldur
+            patientName: rest.patientName || "غير معروف",
+            phoneNumber: rest.phoneNumber || "0000000000",
+            isActive: rest.isActive !== undefined ? rest.isActive : true,
+            appointmentCount: rest.appointmentCount || 0,
+            totalVisits: rest.totalVisits || 0,
+            createdAt: rest.createdAt ? new Date(rest.createdAt) : new Date(),
+            updatedAt: new Date()
+          };
+        });
+
+        // Patientları ekle
+        const insertedPatients = await Patient.insertMany(patientsToInsert, { 
+          session, 
+          validateBeforeSave: false 
+        });
+
+        // Eşleştirme için yeni ID'leri al
+        insertedPatients.forEach(patient => {
+          const originalPatient = backupData.patients.find(p => 
+            p.patientName === patient.patientName && 
+            p.phoneNumber === patient.phoneNumber
+          );
+          if (originalPatient) {
+            const key = `${patient.patientName}-${patient.phoneNumber}`;
+            patientIdMap.set(key, patient._id);
+          }
+        });
       }
     }
 
@@ -332,7 +417,71 @@ exports.restoreBackup = async (req, res) => {
       await Appointment.deleteMany({}).session(session);
       if (backupData.appointments?.length > 0) {
         console.log(`📥 ${backupData.appointments.length} randevu yükleniyor...`);
-        await Appointment.insertMany(backupData.appointments, { session });
+        
+        // Önce geçerli hastaları kontrol et
+        const currentPatients = await Patient.find({}, null, { session }).select('_id patientName phoneNumber');
+        currentPatients.forEach(patient => {
+          const key = `${patient.patientName}-${patient.phoneNumber}`;
+          patientIdMap.set(key, patient._id);
+        });
+
+        // Appointment verilerini hazırla
+        const appointmentsToInsert = [];
+        
+        for (const appointment of backupData.appointments) {
+          const { originalId, patientName, phoneNumber, ...rest } = appointment;
+          
+          // Patient'ı bul
+          const key = `${patientName}-${phoneNumber}`;
+          const patientId = patientIdMap.get(key);
+          
+          // Tarih kontrolü - geçmiş tarihler için bugün veya gelecekte bir tarih kullan
+          let appointmentDate = new Date(rest.appointmentDate);
+          if (isNaN(appointmentDate.getTime())) {
+            appointmentDate = new Date();
+          }
+          
+          // Eğer tarih geçmişse, bugünden sonraki bir tarihe ayarla
+          if (appointmentDate < new Date()) {
+            appointmentDate = new Date();
+            appointmentDate.setDate(appointmentDate.getDate() + 1);
+            
+            // Hafta sonu kontrolü (Cuma=5, Cumartesi=6)
+            const dayOfWeek = appointmentDate.getDay();
+            if (dayOfWeek === 5) { // Cuma
+              appointmentDate.setDate(appointmentDate.getDate() + 2); // Pazartesi
+            } else if (dayOfWeek === 6) { // Cumartesi
+              appointmentDate.setDate(appointmentDate.getDate() + 1); // Pazar (ama Pazar da olmaz, Pazartesi yap)
+              if (appointmentDate.getDay() === 0) {
+                appointmentDate.setDate(appointmentDate.getDate() + 1);
+              }
+            }
+          }
+
+          // Zaman formatı kontrolü
+          let appointmentTime = rest.appointmentTime || "09:00";
+          if (!/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(appointmentTime)) {
+            appointmentTime = "09:00";
+          }
+
+          appointmentsToInsert.push({
+            patientName: patientName || "غير معروف",
+            phoneNumber: phoneNumber || "0000000000",
+            patientId: patientId || null,
+            appointmentDate: appointmentDate,
+            appointmentTime: appointmentTime,
+            notes: rest.notes || "",
+            status: rest.status || "معلقة",
+            createdAt: rest.createdAt ? new Date(rest.createdAt) : new Date(),
+            updatedAt: new Date()
+          });
+        }
+
+        // Doğrulama olmadan ekle
+        await Appointment.insertMany(appointmentsToInsert, { 
+          session, 
+          validateBeforeSave: false 
+        });
       }
     }
 
@@ -340,6 +489,7 @@ exports.restoreBackup = async (req, res) => {
     session.endSession();
 
     backup.status = "restored";
+    backup.restoredAt = new Date();
     await backup.save();
 
     console.log(`✅ Backup geri yüklendi: ${backup.filename}`);
@@ -362,11 +512,11 @@ exports.restoreBackup = async (req, res) => {
     console.error("Backup restore error:", error);
     res.status(500).json({
       success: false,
-      message: "فشل في استعادة النسخ الاحتياطي"
+      message: "فشل في استعادة النسخ الاحتياطي",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
 };
-
 // Backup sil
 exports.deleteBackup = async (req, res) => {
   try {
@@ -469,8 +619,13 @@ exports.createAutomaticBackup = async () => {
       .lean();
 
     const backupData = {
-      patients,
-      appointments,
+      patients: patients.map(p => ({ ...p, originalId: p._id.toString() })),
+      appointments: appointments.map(a => ({
+        ...a,
+        originalId: a._id.toString(),
+        patientName: a.patientId?.patientName || "غير معروف",
+        phoneNumber: a.patientId?.phoneNumber || "غير معروف"
+      })),
       metadata: {
         createdAt: new Date(),
         type: "automatic",

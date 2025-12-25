@@ -3,4 +3,3 @@ module.exports = {
   ADMIN_KEY: process.env.ADMIN_API_KEY || "admin123",
   PORT: process.env.PORT || 5000
 };
-
