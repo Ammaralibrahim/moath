@@ -20,8 +20,7 @@ app.options('*', (req, res) => {
   const origin = req.headers.origin;
   const allowedOrigins = [
     'https://alsawaf.vercel.app',
-    'http://localhost:3000',
-    'http://localhost:5173'
+
   ];
   
   if (allowedOrigins.includes(origin)) {
@@ -40,8 +39,7 @@ app.use((req, res, next) => {
   const origin = req.headers.origin;
   const allowedOrigins = [
     'https://alsawaf.vercel.app',
-    'http://localhost:3000',
-    'http://localhost:5173'
+
   ];
   
   // Origin kontrolü
