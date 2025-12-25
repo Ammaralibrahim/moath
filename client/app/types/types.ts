@@ -1,4 +1,3 @@
-// types/types.ts - Güncel versiyon
 export interface ClinicInfo {
   name: string;
   description: string;
@@ -17,6 +16,8 @@ export interface AvailableDate {
   date: string;
   available: boolean;
   availableSlots: number;
+  totalSlots?: number;
+  bookedSlots?: number;
 }
 
 export interface FormData {
@@ -31,8 +32,10 @@ export interface Message {
 }
 
 export interface DateStatus {
-  status: 'past' | 'unavailable' | 'full' | 'available';
+  status: 'past' | 'unavailable' | 'full' | 'available' | 'holiday';
   text: string;
+  color: string;
+  bg: string;
 }
 
 export interface ArabicDate {
@@ -76,8 +79,8 @@ export const CLINIC_INFO: ClinicInfo = {
   phone: '+963 11 231 2685',
   emergencyPhone: '+963 11 231 2685',
   workingHours: {
-    weekdays: '8:00 صباحاً - 7:00 مساءً (الاثنين - الخميس)',
-    weekend: '8:00 صباحاً - 7:00 مساءً (السبت - الأحد)',
+    weekdays: '8:00 صباحاً - 7:00 مساءً (الأحد - الخميس)', // الخميس يوم عمل
+    weekend: 'مغلق (الجمعة والسبت)', // العطلة فقط الجمعة والسبت
     friday: 'مغلق'
   }
 };
@@ -112,12 +115,4 @@ export interface TimeSlot {
   time: string;
   available: boolean;
   bookedBy?: string;
-}
-// types/types.ts - تحديث
-export interface AvailableDate {
-  date: string;
-  available: boolean;
-  availableSlots: number;
-  totalSlots?: number;  // إضافة
-  bookedSlots?: number; // إضافة
 }

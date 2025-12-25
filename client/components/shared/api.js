@@ -61,6 +61,7 @@ const processQueue = async () => {
   
   isProcessing = false
 }
+
 // Ana API istek fonksiyonu
 export const apiRequest = async (url, options = {}) => {
   return new Promise((resolve, reject) => {
@@ -222,7 +223,82 @@ export const retryApiRequest = async (requestFn, maxRetries = 3, initialDelay = 
   throw lastError
 }
 
+// HASTA RANDEVULARI İÇİN ÖZEL FONKSİYONLAR
 
+/**
+ * Belirli bir hastaya ait randevuları getirir
+ * @param {string} patientId - Hasta ID'si
+ * @param {Object} options - Ek seçenekler
+ * @param {string} options.status - Randevu durumu (optional, pending, confirmed, completed, cancelled)
+ * @param {string} options.sort - Sıralama (asc, desc)
+ * @param {number} options.limit - Limit sayısı
+ * @param {number} options.page - Sayfa numarası
+ * @returns {Promise<Object>} - Randevu listesi
+ */
+export const getPatientAppointments = async (patientId, options = {}) => {
+  const queryParams = new URLSearchParams();
+  
+  if (options.status) queryParams.append('status', options.status);
+  if (options.sort) queryParams.append('sort', options.sort);
+  if (options.limit) queryParams.append('limit', options.limit);
+  if (options.page) queryParams.append('page', options.page);
+  
+  const queryString = queryParams.toString();
+  const url = queryString 
+    ? `/api/appointments/patient/${patientId}?${queryString}`
+    : `/api/appointments/patient/${patientId}`;
+  
+  return await apiRequest(url);
+};
+
+/**
+ * Yeni randevu oluşturur
+ * @param {Object} appointmentData - Randevu verileri
+ * @returns {Promise<Object>} - Oluşturulan randevu
+ */
+export const createAppointment = async (appointmentData) => {
+  return await apiRequest('/api/appointments', {
+    method: 'POST',
+    body: JSON.stringify(appointmentData)
+  })
+}
+
+/**
+ * Randevu günceller
+ * @param {string} appointmentId - Randevu ID'si
+ * @param {Object} appointmentData - Güncellenecek veriler
+ * @returns {Promise<Object>} - Güncellenen randevu
+ */
+export const updateAppointment = async (appointmentId, appointmentData) => {
+  return await apiRequest(`/api/appointments/${appointmentId}`, {
+    method: 'PUT',
+    body: JSON.stringify(appointmentData)
+  })
+}
+
+/**
+ * Randevu siler
+ * @param {string} appointmentId - Randevu ID'si
+ * @returns {Promise<Object>} - Silme sonucu
+ */
+export const deleteAppointment = async (appointmentId) => {
+  return await apiRequest(`/api/appointments/${appointmentId}`, {
+    method: 'DELETE'
+  })
+}
+
+/**
+ * Randevu durumunu günceller
+ * @param {string} appointmentId - Randevu ID'si
+ * @param {string} status - Yeni durum
+ * @returns {Promise<Object>} - Güncellenen randevu
+ */
+export const updateAppointmentStatus = async (appointmentId, status) => {
+  return await apiRequest(`/api/appointments/${appointmentId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status })
+  })
+}
 
 // Rapor indirme fonksiyonu
 export const downloadReport = async (url, fileName, options = {}) => {
@@ -254,6 +330,39 @@ export const downloadReport = async (url, fileName, options = {}) => {
     throw error
   }
 }
+
+export const getFilteredPatientAppointments = async (patientId, filters = {}) => {
+  const queryParams = new URLSearchParams();
+  
+  Object.keys(filters).forEach(key => {
+    if (filters[key]) {
+      queryParams.append(key, filters[key]);
+    }
+  });
+  
+  const url = `/api/appointments/patient/${patientId}/filtered?${queryParams.toString()}`;
+  return await apiRequest(url);
+};
+
+
+export const getTodaysAppointments = async () => {
+  return await apiRequest('/api/appointments/today');
+};
+
+
+// Yaklaşan randevuları getirme
+export const getUpcomingAppointments = async (days = 7) => {
+  return await apiRequest(`/api/appointments/upcoming?days=${days}`);
+};
+
+// Randevu istatistikleri
+export const getAppointmentStats = async (patientId = null) => {
+  const url = patientId 
+    ? `/api/appointments/stats?patientId=${patientId}`
+    : '/api/appointments/stats';
+  
+  return await apiRequest(url);
+};
 
 // Hata yönetimi için yardımcı fonksiyonlar
 export const errorHandlers = {

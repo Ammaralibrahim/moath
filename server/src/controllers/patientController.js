@@ -114,9 +114,7 @@ exports.getAllPatients = async (req, res) => {
 
 exports.getPatientById = async (req, res) => {
   try {
-    const patient = await Patient.findById(req.params.id).select(
-      "-__v"
-    );
+    const patient = await Patient.findById(req.params.id).select("-__v");
 
     if (!patient) {
       return res.status(404).json({
@@ -125,14 +123,27 @@ exports.getPatientById = async (req, res) => {
       });
     }
 
-    // Get patient's appointments
+    // Get patient's appointments (sadece son 10 randevu)
     const appointments = await Appointment.find({ patientId: patient._id })
       .sort({ appointmentDate: -1 })
+      .limit(10)
       .select("-__v");
 
     const patientObj = patient.toObject();
     patientObj.age = patient.age;
     patientObj.appointments = appointments;
+    patientObj.appointmentStats = {
+      total: patient.appointmentCount || 0,
+      upcoming: await Appointment.countDocuments({
+        patientId: patient._id,
+        appointmentDate: { $gte: new Date() },
+        status: { $in: ["pending", "confirmed"] },
+      }),
+      past: await Appointment.countDocuments({
+        patientId: patient._id,
+        appointmentDate: { $lt: new Date() },
+      }),
+    };
 
     res.json({
       success: true,

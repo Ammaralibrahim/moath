@@ -3,44 +3,51 @@ const mongoose = require("mongoose");
 const AppointmentSchema = new mongoose.Schema({
   patientName: {
     type: String,
-    required: [true, "Hasta adı soyadı gereklidir"],
+    required: [true, "اسم المريض مطلوب"],
     trim: true,
-    minlength: [2, "Hasta adı en az 2 karakter olmalıdır"],
-    maxlength: [100, "Hasta adı en fazla 100 karakter olmalıdır"],
+    minlength: [2, "اسم المريض يجب أن يكون على الأقل حرفين"],
+    maxlength: [100, "اسم المريض يجب ألا يتجاوز 100 حرف"],
   },
   phoneNumber: {
     type: String,
-    required: [true, "Telefon numarası gereklidir"],
+    required: [true, "رقم الهاتف مطلوب"],
     trim: true,
     validate: {
       validator: function (v) {
         return /^[0-9+\-\s()]{10,20}$/.test(v);
       },
-      message: "Geçerli bir telefon numarası giriniz",
+      message: "الرجاء إدخال رقم هاتف صحيح",
     },
   },
   appointmentDate: {
     type: Date,
-    required: [true, "Randevu tarihi gereklidir"],
+    required: [true, "تاريخ الموعد مطلوب"],
     validate: {
       validator: function (v) {
-        return v >= new Date().setHours(0, 0, 0, 0);
+        // التحقق من أن التاريخ في المستقبل
+        const isFuture = v >= new Date().setHours(0, 0, 0, 0);
+        
+        // التحقق من أن اليوم ليس جمعة (5) أو سبت (6) - الخميس (4) يوم عمل
+        const dayOfWeek = v.getDay();
+        const isNotWeekend = dayOfWeek !== 5 && dayOfWeek !== 6;
+        
+        return isFuture && isNotWeekend;
       },
-      message: "Randevu tarihi geçmiş bir tarih olamaz",
+      message: "تاريخ الموعد يجب أن يكون في المستقبل ولا يكون في يوم عطلة (الجمعة أو السبت)",
     },
   },
   appointmentTime: {
     type: String,
-    required: [true, "Randevu saati gereklidir"],
+    required: [true, "وقت الموعد مطلوب"],
     match: [
       /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/,
-      "Geçerli bir saat formatı giriniz (HH:MM)",
+      "الرجاء إدخال توقيت صحيح (ساعة:دقيقة)",
     ],
   },
   notes: {
     type: String,
     trim: true,
-    maxlength: [500, "Notlar en fazla 500 karakter olabilir"],
+    maxlength: [500, "الملاحظات يجب ألا تتجاوز 500 حرف"],
     default: "",
   },
   status: {
@@ -48,7 +55,7 @@ const AppointmentSchema = new mongoose.Schema({
     default: "pending",
     enum: {
       values: ["pending", "confirmed", "cancelled"],
-      message: "Geçersiz durum değeri",
+      message: "حالة غير صالحة",
     },
   },
   patientId: {
@@ -72,6 +79,19 @@ AppointmentSchema.index({ createdAt: -1 });
 
 AppointmentSchema.pre("save", function (next) {
   this.updatedAt = Date.now();
+  
+  // تحقق إضافي لأيام العطلة
+  const dayOfWeek = this.appointmentDate.getDay();
+  if (dayOfWeek === 5 || dayOfWeek === 6) {
+    const error = new mongoose.Error.ValidationError(this);
+    error.errors.appointmentDate = new mongoose.Error.ValidatorError({
+      message: "لا يمكن حجز موعد في أيام العطلة (الجمعة والسبت)",
+      path: "appointmentDate",
+      value: this.appointmentDate
+    });
+    return next(error);
+  }
+  
   next();
 });
 

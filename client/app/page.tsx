@@ -1,4 +1,3 @@
-// app/page.tsx (güncellenmiş)
 'use client'
 
 import { useState, useEffect, ChangeEvent, FormEvent } from 'react'
@@ -70,26 +69,42 @@ export default function Home() {
       }
     } catch (error) {
       console.error('خطأ في جلب التواريخ:', error)
-      // Fallback dates - show dates but mark them as unavailable
+      // Fallback dates - show ALL dates including Thursdays
       const dates: AvailableDate[] = []
       const currentDate = new Date(today)
       
       while (currentDate <= maxDate) {
         const dayOfWeek = currentDate.getDay()
-        if (dayOfWeek !== 5) { // Exclude Fridays
-          dates.push({
-            date: formatDate(new Date(currentDate)),
-            available: false, // Mark as unavailable in fallback
-            availableSlots: 0
-          })
+        const dateStr = formatDate(new Date(currentDate))
+        
+        // تعيين حالة كل يوم
+        let available = false
+        let availableSlots = 0
+        
+        // الجمعة (5) والسبت (6) = عطلة
+        if (dayOfWeek === 5 || dayOfWeek === 6) {
+          available = false
+          availableSlots = 0
+        } 
+        // الأحد (0) إلى الخميس (4) = أيام عمل (متاحة)
+        else {
+          available = true
+          availableSlots = 11 // افتراضي 11 موعد متاح
         }
+        
+        dates.push({
+          date: dateStr,
+          available: available,
+          availableSlots: availableSlots
+        })
+        
         currentDate.setDate(currentDate.getDate() + 1)
       }
       setAvailableDates(dates)
       
       setMessage({ 
         type: 'error', 
-        text: 'تعذر الاتصال بالخادم. يرجى المحاولة لاحقاً.' 
+        text: 'تعذر الاتصال بالخادم. يتم عرض تواريخ افتراضية.' 
       })
     } finally {
       setLoading(false)

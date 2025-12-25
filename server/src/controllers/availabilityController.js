@@ -1,58 +1,58 @@
-// controllers/availabilityController.js
 const Appointment = require("../models/Appointment");
 
 exports.getAvailableDates = async (req, res) => {
   try {
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
     const maxDate = new Date();
     maxDate.setDate(today.getDate() + 60);
-
-    // 60 günlük takvim oluştur
+    
+    const appointments = await Appointment.find({
+      appointmentDate: {
+        $gte: today,
+        $lte: maxDate
+      },
+      status: { $in: ["pending", "confirmed"] }
+    });
+    
+    // Generate dates for next 60 days excluding weekends
     const availableDates = [];
     const currentDate = new Date(today);
-
+    
     while (currentDate <= maxDate) {
-      const dateStr = currentDate.toISOString().split('T')[0];
       const dayOfWeek = currentDate.getDay();
-
-      // Cuma gününü (5) ve geçmiş tarihleri hariç tut
-      if (dayOfWeek !== 5) {
-        // Bu tarihteki onaylı/pending randevuları say
-        const appointmentCount = await Appointment.countDocuments({
-          appointmentDate: {
-            $gte: new Date(dateStr),
-            $lt: new Date(new Date(dateStr).setDate(new Date(dateStr).getDate() + 1))
-          },
-          status: { $in: ['pending', 'confirmed'] }
-        });
-
-        const maxSlotsPerDay = 11; // 08:00 - 18:00 arası saatlik (11 saat)
-        const available = appointmentCount < maxSlotsPerDay;
-        const availableSlots = Math.max(0, maxSlotsPerDay - appointmentCount);
-
+      
+      // استبعاد الجمعة (5) والسبت (6)
+      if (dayOfWeek !== 5 && dayOfWeek !== 6) {
+        const dateStr = currentDate.toISOString().split('T')[0];
+        const dayAppointments = appointments.filter(
+          app => app.appointmentDate.toISOString().split('T')[0] === dateStr
+        );
+        
+        const bookedSlots = dayAppointments.length;
+        const totalSlots = 11; // 8:00 - 18:00 with 1 hour slots
+        const availableSlots = Math.max(0, totalSlots - bookedSlots);
+        
         availableDates.push({
           date: dateStr,
-          available: available,
+          available: availableSlots > 0,
           availableSlots: availableSlots,
-          totalSlots: maxSlotsPerDay,
-          bookedSlots: appointmentCount
+          totalSlots: totalSlots,
+          bookedSlots: bookedSlots
         });
       }
-
+      
       currentDate.setDate(currentDate.getDate() + 1);
     }
-
+    
     res.json({
       success: true,
       data: availableDates
     });
   } catch (error) {
-    console.error('Error fetching available dates:', error);
+    console.error("Error fetching available dates:", error);
     res.status(500).json({
       success: false,
-      message: 'فشل في جلب التواريخ المتاحة'
+      message: "فشل في جلب التواريخ المتاحة"
     });
   }
 };
@@ -60,58 +60,53 @@ exports.getAvailableDates = async (req, res) => {
 exports.getAvailableSlots = async (req, res) => {
   try {
     const { date } = req.query;
-
+    
     if (!date) {
       return res.status(400).json({
         success: false,
-        message: 'تاريخ مطلوب'
+        message: "التاريخ مطلوب"
       });
     }
-
-    const selectedDate = new Date(date);
-    selectedDate.setHours(0, 0, 0, 0);
-
-    const endDate = new Date(selectedDate);
-    endDate.setDate(endDate.getDate() + 1);
-
-    // Bu tarihteki mevcut randevuları al
-    const existingAppointments = await Appointment.find({
-      appointmentDate: {
-        $gte: selectedDate,
-        $lt: endDate
-      },
-      status: { $in: ['pending', 'confirmed'] }
-    }).select('appointmentTime patientName');
-
-    const bookedSlots = existingAppointments.map(app => ({
-      time: app.appointmentTime,
-      patientName: app.patientName
-    }));
-
-    // Tüm olası saatler (08:00 - 18:00 arası, saatlik)
+    
+    // Check if date is weekend
+    const dateObj = new Date(date);
+    const dayOfWeek = dateObj.getDay();
+    
+    if (dayOfWeek === 5 || dayOfWeek === 6) {
+      return res.json({
+        success: true,
+        data: [],
+        message: "هذا اليوم عطلة رسمية"
+      });
+    }
+    
+    const appointments = await Appointment.find({
+      appointmentDate: date,
+      status: { $in: ["pending", "confirmed"] }
+    });
+    
+    const bookedTimes = appointments.map(app => app.appointmentTime);
+    
+    // Generate all possible time slots
     const allTimeSlots = [];
     for (let hour = 8; hour <= 18; hour++) {
-      const time = `${hour.toString().padStart(2, '0')}:00`;
-      allTimeSlots.push(time);
+      allTimeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
     }
-
-    // Boş saatleri filtrele
-    const availableSlots = allTimeSlots.filter(slot => 
-      !bookedSlots.some(booked => booked.time === slot)
+    
+    // Filter available slots
+    const availableSlots = allTimeSlots.filter(
+      time => !bookedTimes.includes(time)
     );
-
+    
     res.json({
       success: true,
-      data: availableSlots,
-      bookedSlots: bookedSlots,
-      totalSlots: allTimeSlots.length,
-      availableCount: availableSlots.length
+      data: availableSlots
     });
   } catch (error) {
-    console.error('Error fetching available slots:', error);
+    console.error("Error fetching available slots:", error);
     res.status(500).json({
       success: false,
-      message: 'فشل في جلب الأوقات المتاحة'
+      message: "فشل في جلب الأوقات المتاحة"
     });
   }
 };
@@ -119,36 +114,43 @@ exports.getAvailableSlots = async (req, res) => {
 exports.checkSlotAvailability = async (req, res) => {
   try {
     const { date, time } = req.query;
-
+    
     if (!date || !time) {
       return res.status(400).json({
         success: false,
-        message: 'التاريخ والوقت مطلوبان'
+        message: "التاريخ والوقت مطلوبان"
       });
     }
-
-    const appointmentDate = new Date(date);
-    appointmentDate.setHours(0, 0, 0, 0);
-
-    const existingAppointment = await Appointment.findOne({
-      appointmentDate: appointmentDate,
+    
+    // Check if date is weekend
+    const dateObj = new Date(date);
+    const dayOfWeek = dateObj.getDay();
+    
+    if (dayOfWeek === 5 || dayOfWeek === 6) {
+      return res.json({
+        success: true,
+        data: { available: false },
+        message: "لا يمكن حجز موعد في أيام العطلة"
+      });
+    }
+    
+    const appointment = await Appointment.findOne({
+      appointmentDate: date,
       appointmentTime: time,
-      status: { $in: ['pending', 'confirmed'] }
+      status: { $in: ["pending", "confirmed"] }
     });
-
+    
     res.json({
       success: true,
       data: {
-        available: !existingAppointment,
-        slotTime: time,
-        slotDate: date
+        available: !appointment
       }
     });
   } catch (error) {
-    console.error('Error checking slot availability:', error);
+    console.error("Error checking slot availability:", error);
     res.status(500).json({
       success: false,
-      message: 'فشل في التحقق من توافر الوقت'
+      message: "فشل في التحقق من توافر الوقت"
     });
   }
 };

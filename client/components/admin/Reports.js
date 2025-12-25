@@ -33,7 +33,7 @@ export default function Reports() {
     maxAge: ''
   })
   const [showFilters, setShowFilters] = useState(false)
-  const [reportType, setReportType] = useState('daily')
+  const [reportType, setReportType] = useState('appointments') // تم التعديل
 
   useEffect(() => {
     fetchSystemStats()
@@ -51,68 +51,66 @@ export default function Reports() {
   }
 
   // components/admin/Reports.js - Fonksiyon güncelleme
-const handleExportAppointmentsExcel = async () => {
-  try {
-    setLoading(true)
-    
-    const queryParams = new URLSearchParams({
-      startDate: filters.startDate,
-      endDate: filters.endDate,
-      status: filters.status
-    }).toString()
+  const handleExportAppointmentsExcel = async () => {
+    try {
+      setLoading(true)
+      
+      const queryParams = new URLSearchParams({
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+        status: filters.status
+      }).toString()
 
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/reports/appointments/excel?${queryParams}`,
-      {
-        headers: {
-          'x-admin-key': process.env.NEXT_PUBLIC_ADMIN_API_KEY || 'admin123'
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/reports/appointments/excel?${queryParams}`,
+        {
+          headers: {
+            'x-admin-key': process.env.NEXT_PUBLIC_ADMIN_API_KEY || 'admin123'
+          }
         }
+      )
+
+      if (!response.ok) {
+        let errorMessage = `HTTP Hatası: ${response.status}`
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData.message || errorMessage
+        } catch {
+          // JSON parse hatası
+        }
+        throw new Error(errorMessage)
       }
-    )
 
-    if (!response.ok) {
-      let errorMessage = `HTTP Hatası: ${response.status}`
-      try {
-        const errorData = await response.json()
-        errorMessage = errorData.message || errorMessage
-      } catch {
-        // JSON parse hatası
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      
+      // Dosya adını oluştur
+      const startDateStr = new Date(filters.startDate).toLocaleDateString('tr-TR').replace(/\./g, '')
+      const endDateStr = new Date(filters.endDate).toLocaleDateString('tr-TR').replace(/\./g, '')
+      const statusText = filters.status === 'all' ? '' : `-${filters.status}`
+      const fileName = `randevular-${startDateStr}-${endDateStr}${statusText}.xlsx`
+      
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast.success('✅ تم تصدير المواعيد بنجاح (Excel)')
+    } catch (error) {
+      console.error('Error exporting appointments:', error)
+      toast.error(error.message || '❌ فشل في تصدير المواعيد')
+      
+      // Sunucu hatası durumunda kullanıcıyı bilgilendir
+      if (error.message.includes('500') || error.message.includes('Server')) {
+        toast.error('✅ Sunucu hatası. Lütfen yöneticiye başvurun veya daha sonra tekrar deneyin.')
       }
-      throw new Error(errorMessage)
+    } finally {
+      setLoading(false)
     }
-
-    const blob = await response.blob()
-    const url = window.URL.createObjectURL(blob)
-    
-    // Dosya adını oluştur
-    const startDateStr = new Date(filters.startDate).toLocaleDateString('tr-TR').replace(/\./g, '')
-    const endDateStr = new Date(filters.endDate).toLocaleDateString('tr-TR').replace(/\./g, '')
-    const statusText = filters.status === 'all' ? '' : `-${filters.status}`
-    const fileName = `randevular-${startDateStr}-${endDateStr}${statusText}.xlsx`
-    
-    const a = document.createElement('a')
-    a.href = url
-    a.download = fileName
-    document.body.appendChild(a)
-    a.click()
-    window.URL.revokeObjectURL(url)
-    document.body.removeChild(a)
-
-    toast.success('✅ تم تصدير المواعيد بنجاح (Excel)')
-  } catch (error) {
-    console.error('Error exporting appointments:', error)
-    toast.error(error.message || '❌ فشل في تصدير المواعيد')
-    
-    // Sunucu hatası durumunda kullanıcıyı bilgilendir
-    if (error.message.includes('500') || error.message.includes('Server')) {
-      toast.error('✅ Sunucu hatası. Lütfen yöneticiye başvurun veya daha sonra tekrar deneyin.')
-    }
-  } finally {
-    setLoading(false)
   }
-}
-
-
 
   const handleExportPatientsExcel = async () => {
     try {
@@ -298,49 +296,6 @@ const handleExportAppointmentsExcel = async () => {
     } catch (error) {
       console.error('Error generating upcoming appointments:', error)
       toast.error(error.message || '❌ فشل في إنشاء تقرير المواعيد القادمة')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleDownloadDailyPDF = async () => {
-    try {
-      setLoading(true)
-      
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/reports/daily/pdf?date=${filters.startDate}`,
-        {
-          headers: {
-            'x-admin-key': process.env.NEXT_PUBLIC_ADMIN_API_KEY || 'admin123'
-          }
-        }
-      )
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          const errorData = await response.json()
-          throw new Error(errorData.message || 'Veri bulunamadı')
-        }
-        throw new Error(`HTTP ${response.status}`)
-      }
-
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      
-      const fileName = `gunluk-rapor-${filters.startDate}.pdf`
-      
-      const a = document.createElement('a')
-      a.href = url
-      a.download = fileName
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-
-      toast.success('✅ تم تحميل التقرير اليومي كملف PDF')
-    } catch (error) {
-      console.error('Error downloading PDF:', error)
-      toast.error(error.message || '❌ فشل في تحميل ملف PDF')
     } finally {
       setLoading(false)
     }
@@ -659,7 +614,7 @@ const handleExportAppointmentsExcel = async () => {
             إعدادات التقرير
           </h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium mb-2" style={{ color: colors.textLight }}>
                 نوع التقرير
@@ -674,8 +629,8 @@ const handleExportAppointmentsExcel = async () => {
                   color: colors.text
                 }}
               >
-                <option value="daily">تقرير يومي</option>
-                <option value="monthly">تقرير شهري</option>
+                <option value="appointments">مواعيد</option>
+                <option value="patients">مرضى</option>
                 <option value="performance">أداء شهري</option>
                 <option value="analysis">تحليل المرضى</option>
                 <option value="upcoming">مواعيد قادمة</option>
@@ -699,7 +654,7 @@ const handleExportAppointmentsExcel = async () => {
               />
             </div>
             
-            {reportType === 'monthly' && (
+            {reportType === 'performance' && (
               <div>
                 <label className="block text-sm font-medium mb-2" style={{ color: colors.textLight }}>
                   الشهر
@@ -732,11 +687,11 @@ const handleExportAppointmentsExcel = async () => {
               <button
                 onClick={() => {
                   switch(reportType) {
-                    case 'daily':
-                      handleDownloadDailyPDF()
+                    case 'appointments':
+                      handleExportAppointmentsExcel()
                       break
-                    case 'monthly':
-                      handleExportMonthlyPerformance()
+                    case 'patients':
+                      handleExportPatientsExcel()
                       break
                     case 'performance':
                       handleExportMonthlyPerformance()
@@ -766,7 +721,7 @@ const handleExportAppointmentsExcel = async () => {
                 ) : (
                   <>
                     <IconChartPie className="w-4 h-4" />
-                    {reportType === 'daily' ? 'تحميل PDF' : 'إنشاء تقرير Excel'}
+                    إنشاء تقرير Excel
                   </>
                 )}
               </button>
@@ -840,34 +795,6 @@ const handleExportAppointmentsExcel = async () => {
                 >
                   <IconDocumentText className="w-3 h-3" />
                   Excel (XLSX)
-                </button>
-              </div>
-              
-              {/* تقرير يومي PDF */}
-              <div className="p-4 rounded-xl border hover:transform hover:scale-[1.02] transition-all" style={{ 
-                borderColor: colors.border,
-                backgroundColor: colors.surfaceLight
-              }}>
-                <div className="flex items-center gap-3 mb-3">
-                  <IconCalendarDays className="w-6 h-6" style={{ color: colors.error }} />
-                  <div>
-                    <div className="font-semibold" style={{ color: colors.text }}>تقرير يومي (PDF)</div>
-                    <div className="text-sm" style={{ color: colors.textLight }}>
-                      تقرير مفصل بصيغة PDF للطباعة بتاريخ {filters.startDate}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={handleDownloadDailyPDF}
-                  disabled={loading}
-                  className="w-full px-4 py-2 rounded-lg text-xs font-semibold hover:opacity-90 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
-                  style={{ 
-                    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                    color: '#FFFFFF'
-                  }}
-                >
-                  <IconArrowDownTray className="w-3 h-3" />
-                  تحميل PDF
                 </button>
               </div>
             </div>

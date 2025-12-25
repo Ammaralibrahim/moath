@@ -28,6 +28,15 @@ exports.createAppointment = async (req, res) => {
       });
     }
 
+    // Check if appointment is on weekend (Friday or Saturday only)
+    const dayOfWeek = appointmentDateTime.getDay(); // 0 = Sunday, 5 = Friday, 6 = Saturday
+    if (dayOfWeek === 5 || dayOfWeek === 6) {
+      return res.status(400).json({
+        success: false,
+        message: "لا يمكن حجز موعد في أيام العطلة (الجمعة والسبت). يرجى اختيار يوم عمل من الأحد إلى الخميس.",
+      });
+    }
+
     // Check for duplicate appointment
     const existingAppointment = await Appointment.findOne({
       appointmentDate: appointmentDateTime,
@@ -161,6 +170,316 @@ exports.getAdminAppointments = async (req, res) => {
       success: false,
       message: "فشل في جلب المواعيد",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
+exports.getPatientAppointments = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const {
+      status = "",
+      sortBy = "appointmentDate",
+      sortOrder = "desc",
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    // Hasta var mı kontrol et
+    const patient = await Patient.findById(patientId);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "المريض غير موجود",
+      });
+    }
+
+    const skip = (page - 1) * limit;
+    let query = { patientId };
+
+    // Durum filtresi
+    if (status) {
+      query.status = status;
+    }
+
+    // Sıralama
+    const sort = {};
+    sort[sortBy] = sortOrder === "desc" ? -1 : 1;
+
+    // Randevuları getir
+    const appointments = await Appointment.find(query)
+      .populate("patientId", "patientName phoneNumber")
+      .sort(sort)
+      .skip(skip)
+      .limit(parseInt(limit))
+      .select("-__v");
+
+    const total = await Appointment.countDocuments(query);
+
+    // Geçmiş ve gelecek randevuları ayır
+    const now = new Date();
+    const upcoming = appointments.filter(
+      (app) => new Date(app.appointmentDate) >= now
+    );
+    const past = appointments.filter(
+      (app) => new Date(app.appointmentDate) < now
+    );
+
+    res.json({
+      success: true,
+      data: appointments,
+      upcomingCount: upcoming.length,
+      pastCount: past.length,
+      total,
+      page: parseInt(page),
+      totalPages: Math.ceil(total / limit),
+      hasMore: page * limit < total,
+    });
+  } catch (error) {
+    console.error("Error fetching patient appointments:", error);
+    res.status(500).json({
+      success: false,
+      message: "فشل في جلب مواعيد المريض",
+    });
+  }
+};
+
+exports.getTodaysAppointments = async (req, res) => {
+  try {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const appointments = await Appointment.find({
+      appointmentDate: {
+        $gte: today,
+        $lt: tomorrow,
+      },
+      status: { $in: ["pending", "confirmed"] },
+    })
+      .populate("patientId", "patientName phoneNumber gender birthDate")
+      .sort({ appointmentTime: 1 })
+      .select("-__v");
+
+    // Tarihe göre grupla
+    const groupedByTime = appointments.reduce((acc, appointment) => {
+      const time = appointment.appointmentTime.substring(0, 2);
+      if (!acc[time]) {
+        acc[time] = [];
+      }
+      acc[time].push(appointment);
+      return acc;
+    }, {});
+
+    res.json({
+      success: true,
+      data: appointments,
+      groupedByTime,
+      total: appointments.length,
+      upcomingCount: appointments.filter(
+        (app) => new Date(app.appointmentDate) >= today
+      ).length,
+    });
+  } catch (error) {
+    console.error("Error fetching today's appointments:", error);
+    res.status(500).json({
+      success: false,
+      message: "فشل في جلب مواعيد اليوم",
+    });
+  }
+};
+
+// Yaklaşan randevuları getir
+exports.getUpcomingAppointments = async (req, res) => {
+  try {
+    const { days = 7 } = req.query;
+    const today = new Date();
+    const futureDate = new Date(today);
+    futureDate.setDate(futureDate.getDate() + parseInt(days));
+
+    const appointments = await Appointment.find({
+      appointmentDate: {
+        $gte: today,
+        $lt: futureDate,
+      },
+      status: { $in: ["pending", "confirmed"] },
+    })
+      .populate("patientId", "patientName phoneNumber gender birthDate")
+      .sort({ appointmentDate: 1, appointmentTime: 1 })
+      .select("-__v");
+
+    // Günlere göre grupla
+    const groupedByDate = appointments.reduce((acc, appointment) => {
+      const date = appointment.appointmentDate.toISOString().split("T")[0];
+      if (!acc[date]) {
+        acc[date] = [];
+      }
+      acc[date].push(appointment);
+      return acc;
+    }, {});
+
+    res.json({
+      success: true,
+      data: appointments,
+      groupedByDate,
+      total: appointments.length,
+      fromDate: today.toISOString().split("T")[0],
+      toDate: futureDate.toISOString().split("T")[0],
+    });
+  } catch (error) {
+    console.error("Error fetching upcoming appointments:", error);
+    res.status(500).json({
+      success: false,
+      message: "فشل في جلب المواعيد القادمة",
+    });
+  }
+};
+
+// Randevu istatistikleri
+exports.getAppointmentStats = async (req, res) => {
+  try {
+    const { patientId } = req.query;
+    let query = {};
+
+    if (patientId) {
+      query.patientId = patientId;
+    }
+
+    const total = await Appointment.countDocuments(query);
+    const pending = await Appointment.countDocuments({
+      ...query,
+      status: "pending",
+    });
+    const confirmed = await Appointment.countDocuments({
+      ...query,
+      status: "confirmed",
+    });
+    const completed = await Appointment.countDocuments({
+      ...query,
+      status: "completed",
+    });
+    const cancelled = await Appointment.countDocuments({
+      ...query,
+      status: "cancelled",
+    });
+
+    // Bugünkü randevular
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const todaysCount = await Appointment.countDocuments({
+      ...query,
+      appointmentDate: {
+        $gte: today,
+        $lt: tomorrow,
+      },
+    });
+
+    // Bu haftaki randevular
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const weeklyCount = await Appointment.countDocuments({
+      ...query,
+      appointmentDate: { $gte: weekAgo },
+    });
+
+    // Aylık istatistikler
+    const monthlyStats = await Appointment.aggregate([
+      {
+        $match: query,
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$appointmentDate" },
+            month: { $month: "$appointmentDate" },
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { "_id.year": -1, "_id.month": -1 } },
+      { $limit: 6 },
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        total,
+        pending,
+        confirmed,
+        completed,
+        cancelled,
+        todaysCount,
+        weeklyCount,
+        monthlyStats,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching appointment stats:", error);
+    res.status(500).json({
+      success: false,
+      message: "فشل في جلب إحصائيات المواعيد",
+    });
+  }
+};
+
+// Filtreli randevu arama
+exports.getFilteredAppointments = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const {
+      startDate,
+      endDate,
+      status,
+      sortBy = "appointmentDate",
+      sortOrder = "desc",
+    } = req.query;
+
+    let query = { patientId };
+
+    // Tarih filtresi
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      end.setDate(end.getDate() + 1); // Son tarihi dahil etmek için
+
+      query.appointmentDate = {
+        $gte: start,
+        $lt: end,
+      };
+    } else if (startDate) {
+      const start = new Date(startDate);
+      query.appointmentDate = { $gte: start };
+    } else if (endDate) {
+      const end = new Date(endDate);
+      end.setDate(end.getDate() + 1);
+      query.appointmentDate = { $lt: end };
+    }
+
+    // Durum filtresi
+    if (status) {
+      query.status = status;
+    }
+
+    // Sıralama
+    const sort = {};
+    sort[sortBy] = sortOrder === "desc" ? -1 : 1;
+
+    const appointments = await Appointment.find(query)
+      .populate("patientId", "patientName phoneNumber")
+      .sort(sort)
+      .select("-__v");
+
+    res.json({
+      success: true,
+      data: appointments,
+      total: appointments.length,
+    });
+  } catch (error) {
+    console.error("Error fetching filtered appointments:", error);
+    res.status(500).json({
+      success: false,
+      message: "فشل في البحث عن المواعيد",
     });
   }
 };
