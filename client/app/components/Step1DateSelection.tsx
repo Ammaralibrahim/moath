@@ -24,6 +24,13 @@ const Step1DateSelection: React.FC<Step1DateSelectionProps> = ({
     'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
   ];
 
+  // إعادة today إلى حالته الافتراضية
+  const today = useMemo(() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }, []);
+
   const getArabicDateInfo = (dateStr: string) => {
     const date = new Date(dateStr);
     const day = arabicDays[date.getDay()];
@@ -223,9 +230,9 @@ const Step1DateSelection: React.FC<Step1DateSelectionProps> = ({
             {displayMonths.map((dateInfo) => {
               const arabicDate = getArabicDateInfo(dateInfo.date);
               const dateObj = new Date(dateInfo.date);
-              const daysDiff = getDaysDifference(dateObj);
               const status = getDateStatus(dateObj, dateInfo);
-              const isToday = daysDiff === 0;
+              // إعادة isToday إلى حالته الافتراضية باستخدام today المحفوظ
+              const isToday = dateObj.toDateString() === today.toDateString();
               const isSelected = selectedDate === dateInfo.date;
               const availableSlots = dateInfo.availableSlots || 0;
               const totalSlots = dateInfo.totalSlots || 11;
