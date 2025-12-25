@@ -1,4 +1,3 @@
-// @/components/shared/constants.js
 export const colors = {
   // Ana renkler
   primary: "#667eea",
@@ -111,7 +110,12 @@ export const globalStyles = `
   }
 `;
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-export const ADMIN_API_KEY =
-  process.env.NEXT_PUBLIC_ADMIN_API_KEY || "admin123";
+// ÇOK ÖNEMLİ: API URL'lerini düzelt
+export const API_BASE_URL = "https://alsawaf-api.vercel.app";
+export const ADMIN_API_KEY = "admin123"; // Hardcode et, env'den gelmiyor
+
+// Alternatif API URL'leri (fallback)
+export const API_BASE_URLS = [
+  "https://alsawaf-api.vercel.app",
+  "http://localhost:5000"
+];
