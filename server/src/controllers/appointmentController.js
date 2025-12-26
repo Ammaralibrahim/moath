@@ -1,6 +1,40 @@
 const Appointment = require("../models/Appointment");
 const Patient = require("../models/Patient");
 
+const validateAppointmentDateTime = async (appointmentDate, appointmentTime, patientId = null, appointmentId = null) => {
+  const appointmentDateTime = new Date(appointmentDate);
+  
+  if (appointmentDateTime < new Date().setHours(0, 0, 0, 0)) {
+    return { valid: false, message: "لا يمكن حجز موعد في تاريخ مضى" };
+  }
+  
+  const dayOfWeek = appointmentDateTime.getDay();
+  if (dayOfWeek === 5 || dayOfWeek === 6) {
+    return { valid: false, message: "لا يمكن حجز موعد في أيام العطلة (الجمعة والسبت)" };
+  }
+  
+  const query = {
+    appointmentDate: appointmentDateTime,
+    appointmentTime: appointmentTime,
+    status: { $in: ["pending", "confirmed"] },
+  };
+  
+  if (patientId) {
+    query.patientId = patientId;
+  }
+  
+  if (appointmentId) {
+    query._id = { $ne: appointmentId };
+  }
+  
+  const existingAppointment = await Appointment.findOne(query);
+  if (existingAppointment) {
+    return { valid: false, message: "هذا الموعد محجوز مسبقاً للمريض" };
+  }
+  
+  return { valid: true };
+};
+
 exports.createAppointment = async (req, res) => {
   try {
     const {
@@ -9,68 +43,49 @@ exports.createAppointment = async (req, res) => {
       appointmentDate,
       appointmentTime,
       notes,
+      patientId,
     } = req.body;
 
-    // Validate required fields
     if (!patientName || !phoneNumber || !appointmentDate || !appointmentTime) {
       return res.status(400).json({
         success: false,
-        message: "جميع الحقول المطلوبة يجب ملؤها",
+        message: "جميع الحقول المطلوبة يجب ملؤها (الاسم، الهاتف، التاريخ، الوقت)",
       });
     }
 
-    // Check if the appointment date is in the future
-    const appointmentDateTime = new Date(appointmentDate);
-    if (appointmentDateTime < new Date().setHours(0, 0, 0, 0)) {
+    const validation = await validateAppointmentDateTime(appointmentDate, appointmentTime, patientId);
+    if (!validation.valid) {
       return res.status(400).json({
         success: false,
-        message: "لا يمكن حجز موعد في تاريخ مضى",
+        message: validation.message,
       });
     }
 
-    // Check if appointment is on weekend (Friday or Saturday only)
-    const dayOfWeek = appointmentDateTime.getDay(); // 0 = Sunday, 5 = Friday, 6 = Saturday
-    if (dayOfWeek === 5 || dayOfWeek === 6) {
-      return res.status(400).json({
-        success: false,
-        message: "لا يمكن حجز موعد في أيام العطلة (الجمعة والسبت). يرجى اختيار يوم عمل من الأحد إلى الخميس.",
-      });
-    }
-
-    // Check for duplicate appointment
-    const existingAppointment = await Appointment.findOne({
-      appointmentDate: appointmentDateTime,
-      appointmentTime: appointmentTime,
-      status: { $in: ["pending", "confirmed"] },
-    });
-
-    if (existingAppointment) {
-      return res.status(400).json({
-        success: false,
-        message: "هذا الموعد محجوز مسبقاً. يرجى اختيار وقت آخر.",
-      });
-    }
-
-    // Find or create patient
-    let patient = await Patient.findOne({ phoneNumber });
-    if (!patient) {
-      patient = new Patient({
-        patientName,
-        phoneNumber,
-        gender: "male", // Default
-      });
-      await patient.save();
+    let patient;
+    if (patientId) {
+      patient = await Patient.findById(patientId);
+      if (!patient) {
+        return res.status(404).json({
+          success: false,
+          message: "المريض غير موجود",
+        });
+      }
     } else {
-      // Update last visit date
-      patient.lastVisit = new Date();
-      await patient.save();
+      patient = await Patient.findOne({ phoneNumber });
+      if (!patient) {
+        patient = new Patient({
+          patientName,
+          phoneNumber,
+          gender: "male",
+        });
+        await patient.save();
+      }
     }
 
-    // Create new appointment
     const appointment = new Appointment({
       patientName,
       phoneNumber,
-      appointmentDate: appointmentDateTime,
+      appointmentDate: new Date(appointmentDate),
       appointmentTime,
       notes: notes || "",
       status: "pending",
@@ -79,17 +94,13 @@ exports.createAppointment = async (req, res) => {
 
     await appointment.save();
 
-    // Update patient's appointment count
-    patient.appointmentCount = await Appointment.countDocuments({
-      patientId: patient._id,
-    });
-    patient.lastVisit = new Date();
-    await patient.save();
+    const populatedAppointment = await Appointment.findById(appointment._id)
+      .populate('patientId', 'patientName phoneNumber birthDate gender email');
 
     res.status(201).json({
       success: true,
       message: "تم حجز الموعد بنجاح",
-      data: appointment,
+      data: populatedAppointment,
     });
   } catch (error) {
     console.error("Error creating appointment:", error);
@@ -103,9 +114,17 @@ exports.createAppointment = async (req, res) => {
       });
     }
 
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "هذا الموعد محجوز مسبقاً",
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: "فشل في حجز الموعد",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
@@ -117,9 +136,11 @@ exports.getAdminAppointments = async (req, res) => {
       status,
       patientName,
       phoneNumber,
+      patientId,
       page = 1,
       limit = 20,
     } = req.query;
+    
     let query = {};
 
     if (date) {
@@ -145,10 +166,14 @@ exports.getAdminAppointments = async (req, res) => {
       query.phoneNumber = { $regex: phoneNumber, $options: "i" };
     }
 
+    if (patientId) {
+      query.patientId = patientId;
+    }
+
     const skip = (page - 1) * limit;
 
     const appointments = await Appointment.find(query)
-      .populate("patientId", "patientName phoneNumber birthDate gender")
+      .populate("patientId", "patientName phoneNumber birthDate gender email address")
       .sort({ appointmentDate: -1, appointmentTime: -1 })
       .skip(skip)
       .limit(parseInt(limit))
@@ -185,7 +210,6 @@ exports.getPatientAppointments = async (req, res) => {
       limit = 10,
     } = req.query;
 
-    // Hasta var mı kontrol et
     const patient = await Patient.findById(patientId);
     if (!patient) {
       return res.status(404).json({
@@ -197,18 +221,15 @@ exports.getPatientAppointments = async (req, res) => {
     const skip = (page - 1) * limit;
     let query = { patientId };
 
-    // Durum filtresi
     if (status) {
       query.status = status;
     }
 
-    // Sıralama
     const sort = {};
     sort[sortBy] = sortOrder === "desc" ? -1 : 1;
 
-    // Randevuları getir
     const appointments = await Appointment.find(query)
-      .populate("patientId", "patientName phoneNumber")
+      .populate("patientId", "patientName phoneNumber birthDate gender")
       .sort(sort)
       .skip(skip)
       .limit(parseInt(limit))
@@ -216,7 +237,6 @@ exports.getPatientAppointments = async (req, res) => {
 
     const total = await Appointment.countDocuments(query);
 
-    // Geçmiş ve gelecek randevuları ayır
     const now = new Date();
     const upcoming = appointments.filter(
       (app) => new Date(app.appointmentDate) >= now
@@ -261,7 +281,6 @@ exports.getTodaysAppointments = async (req, res) => {
       .sort({ appointmentTime: 1 })
       .select("-__v");
 
-    // Tarihe göre grupla
     const groupedByTime = appointments.reduce((acc, appointment) => {
       const time = appointment.appointmentTime.substring(0, 2);
       if (!acc[time]) {
@@ -289,7 +308,6 @@ exports.getTodaysAppointments = async (req, res) => {
   }
 };
 
-// Yaklaşan randevuları getir
 exports.getUpcomingAppointments = async (req, res) => {
   try {
     const { days = 7 } = req.query;
@@ -308,7 +326,6 @@ exports.getUpcomingAppointments = async (req, res) => {
       .sort({ appointmentDate: 1, appointmentTime: 1 })
       .select("-__v");
 
-    // Günlere göre grupla
     const groupedByDate = appointments.reduce((acc, appointment) => {
       const date = appointment.appointmentDate.toISOString().split("T")[0];
       if (!acc[date]) {
@@ -335,7 +352,6 @@ exports.getUpcomingAppointments = async (req, res) => {
   }
 };
 
-// Randevu istatistikleri
 exports.getAppointmentStats = async (req, res) => {
   try {
     const { patientId } = req.query;
@@ -363,7 +379,6 @@ exports.getAppointmentStats = async (req, res) => {
       status: "cancelled",
     });
 
-    // Bugünkü randevular
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -375,7 +390,6 @@ exports.getAppointmentStats = async (req, res) => {
       },
     });
 
-    // Bu haftaki randevular
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
     const weeklyCount = await Appointment.countDocuments({
@@ -383,7 +397,6 @@ exports.getAppointmentStats = async (req, res) => {
       appointmentDate: { $gte: weekAgo },
     });
 
-    // Aylık istatistikler
     const monthlyStats = await Appointment.aggregate([
       {
         $match: query,
@@ -423,7 +436,6 @@ exports.getAppointmentStats = async (req, res) => {
   }
 };
 
-// Filtreli randevu arama
 exports.getFilteredAppointments = async (req, res) => {
   try {
     const { patientId } = req.params;
@@ -437,11 +449,10 @@ exports.getFilteredAppointments = async (req, res) => {
 
     let query = { patientId };
 
-    // Tarih filtresi
     if (startDate && endDate) {
       const start = new Date(startDate);
       const end = new Date(endDate);
-      end.setDate(end.getDate() + 1); // Son tarihi dahil etmek için
+      end.setDate(end.getDate() + 1);
 
       query.appointmentDate = {
         $gte: start,
@@ -456,12 +467,10 @@ exports.getFilteredAppointments = async (req, res) => {
       query.appointmentDate = { $lt: end };
     }
 
-    // Durum filtresi
     if (status) {
       query.status = status;
     }
 
-    // Sıralama
     const sort = {};
     sort[sortBy] = sortOrder === "desc" ? -1 : 1;
 
@@ -486,16 +495,10 @@ exports.getFilteredAppointments = async (req, res) => {
 
 exports.updateAppointment = async (req, res) => {
   try {
-    const { status, notes, patientName, phoneNumber } = req.body;
+    const { id } = req.params;
+    const { status, notes, patientName, phoneNumber, appointmentDate, appointmentTime } = req.body;
 
-    if (!status || !["pending", "confirmed", "cancelled"].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: "حالة غير صالحة",
-      });
-    }
-
-    const appointment = await Appointment.findById(req.params.id);
+    const appointment = await Appointment.findById(id);
     if (!appointment) {
       return res.status(404).json({
         success: false,
@@ -503,36 +506,74 @@ exports.updateAppointment = async (req, res) => {
       });
     }
 
-    // Update appointment
-    appointment.status = status;
-    if (notes !== undefined) appointment.notes = notes;
-    appointment.updatedAt = new Date();
-
-    // Update patient info if provided
-    if (patientName || phoneNumber) {
-      if (patientName) appointment.patientName = patientName;
-      if (phoneNumber) appointment.phoneNumber = phoneNumber;
-
-      // Update linked patient if exists
-      if (appointment.patientId) {
-        const patient = await Patient.findById(appointment.patientId);
-        if (patient) {
-          if (patientName) patient.patientName = patientName;
-          if (phoneNumber) patient.phoneNumber = phoneNumber;
-          await patient.save();
-        }
+    if (appointmentDate && appointmentTime) {
+      const validation = await validateAppointmentDateTime(
+        appointmentDate, 
+        appointmentTime, 
+        appointment.patientId, 
+        id
+      );
+      if (!validation.valid) {
+        return res.status(400).json({
+          success: false,
+          message: validation.message,
+        });
       }
     }
 
-    await appointment.save();
+    if (status && !["pending", "confirmed", "completed", "cancelled"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "حالة غير صالحة",
+      });
+    }
+
+    const updateData = {};
+    if (status) updateData.status = status;
+    if (notes !== undefined) updateData.notes = notes;
+    if (appointmentDate) updateData.appointmentDate = new Date(appointmentDate);
+    if (appointmentTime) updateData.appointmentTime = appointmentTime;
+    if (patientName) updateData.patientName = patientName;
+    if (phoneNumber) updateData.phoneNumber = phoneNumber;
+    
+    updateData.updatedAt = new Date();
+
+    const updatedAppointment = await Appointment.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true, runValidators: true }
+    ).populate("patientId", "patientName phoneNumber birthDate gender email");
+
+    if (appointment.patientId && (patientName || phoneNumber)) {
+      const patientUpdate = {};
+      if (patientName) patientUpdate.patientName = patientName;
+      if (phoneNumber) patientUpdate.phoneNumber = phoneNumber;
+      patientUpdate.updatedAt = new Date();
+      
+      await Patient.findByIdAndUpdate(
+        appointment.patientId,
+        patientUpdate,
+        { new: true }
+      );
+    }
 
     res.json({
       success: true,
       message: "تم تحديث الموعد بنجاح",
-      data: appointment,
+      data: updatedAppointment,
     });
   } catch (error) {
     console.error("Error updating appointment:", error);
+    
+    if (error.name === "ValidationError") {
+      const errors = Object.values(error.errors).map((err) => err.message);
+      return res.status(400).json({
+        success: false,
+        message: "خطأ في التحقق من البيانات",
+        errors: errors,
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: "فشل في تحديث الموعد",
@@ -542,8 +583,9 @@ exports.updateAppointment = async (req, res) => {
 
 exports.deleteAppointment = async (req, res) => {
   try {
-    const appointment = await Appointment.findById(req.params.id);
+    const { id } = req.params;
 
+    const appointment = await Appointment.findById(id);
     if (!appointment) {
       return res.status(404).json({
         success: false,
@@ -551,20 +593,17 @@ exports.deleteAppointment = async (req, res) => {
       });
     }
 
-    // Update patient's appointment count if linked
-    if (appointment.patientId) {
-      const patient = await Patient.findById(appointment.patientId);
-      if (patient) {
-        patient.appointmentCount = Math.max(0, patient.appointmentCount - 1);
-        await patient.save();
-      }
-    }
+    const patientId = appointment.patientId;
 
-    await appointment.deleteOne();
+    await Appointment.findByIdAndDelete(id);
 
     res.json({
       success: true,
       message: "تم حذف الموعد بنجاح",
+      data: {
+        deletedAppointmentId: id,
+        patientId: patientId,
+      },
     });
   } catch (error) {
     console.error("Error deleting appointment:", error);

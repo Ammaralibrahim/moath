@@ -6,7 +6,7 @@ import PatientModal from './modals/PatientModal'
 import PatientViewModal from './modals/PatientViewModal'
 import AppointmentModal from './modals/AppointmentModal'
 import { colors } from '@/components/shared/constants'
-import { apiRequest, showMessage } from '@/components/shared/api'
+import { apiRequest, createAppointment, deletePatient } from '@/components/shared/api'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import toast from 'react-hot-toast'
 
@@ -33,33 +33,8 @@ export default function Patients() {
   const [showPatientViewModal, setShowPatientViewModal] = useState(false)
   const [showAppointmentModal, setShowAppointmentModal] = useState(false)
   const [initialLoad, setInitialLoad] = useState(true)
-
-  // Debounce için timer
+  const [isDeleting, setIsDeleting] = useState(false)
   const [searchTimer, setSearchTimer] = useState(null)
-
-  // İlk yükleme ve filtre değişikliklerinde hastaları getir
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchPatients()
-    }, searchTimer ? 500 : 0) // Sadece arama için debounce
-
-    return () => clearTimeout(timer)
-  }, [pagination.page, filters.gender, filters.hasAppointments, filters.minAge, filters.maxAge])
-
-  // Arama için debounce
-  useEffect(() => {
-    if (searchTimer) {
-      clearTimeout(searchTimer)
-    }
-    
-    const timer = setTimeout(() => {
-      fetchPatients()
-    }, 300)
-    
-    setSearchTimer(timer)
-    
-    return () => clearTimeout(timer)
-  }, [filters.search])
 
   const fetchPatients = useCallback(async () => {
     try {
@@ -74,7 +49,7 @@ export default function Patients() {
       
       const data = await apiRequest(`/api/patients?${query}`, {
         showSuccess: false,
-        showError: true
+        showError: false
       })
       
       if (data.success) {
@@ -93,6 +68,14 @@ export default function Patients() {
           })
           setInitialLoad(false)
         }
+      } else {
+        setPatients([])
+        setPagination({
+          page: 1,
+          totalPages: 1,
+          total: 0,
+          limit: 10
+        })
       }
     } catch (error) {
       console.error('Error fetching patients:', error)
@@ -103,10 +86,33 @@ export default function Patients() {
         total: 0,
         limit: 10
       })
+      toast.error('فشل في تحميل بيانات المرضى')
     } finally {
       setLoading(false)
     }
   }, [filters, pagination.page, pagination.limit, initialLoad])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchPatients()
+    }, searchTimer ? 500 : 0)
+
+    return () => clearTimeout(timer)
+  }, [pagination.page, filters.gender, filters.hasAppointments, filters.minAge, filters.maxAge, fetchPatients])
+
+  useEffect(() => {
+    if (searchTimer) {
+      clearTimeout(searchTimer)
+    }
+    
+    const timer = setTimeout(() => {
+      fetchPatients()
+    }, 300)
+    
+    setSearchTimer(timer)
+    
+    return () => clearTimeout(timer)
+  }, [filters.search, fetchPatients])
 
   const fetchPatientAppointments = async (patientId) => {
     if (!patientId) return
@@ -115,7 +121,7 @@ export default function Patients() {
       setLoadingAppointments(true)
       const data = await apiRequest(`/api/appointments/patient/${patientId}?limit=5`, {
         showSuccess: false,
-        showError: true
+        showError: false
       })
       
       if (data.success) {
@@ -126,10 +132,7 @@ export default function Patients() {
     } catch (error) {
       console.error('Error fetching appointments:', error)
       setPatientAppointments([])
-      toast.error('فشل في تحميل المواعيد', {
-        duration: 3000,
-        position: 'top-center'
-      })
+      toast.error('فشل في تحميل المواعيد')
     } finally {
       setLoadingAppointments(false)
     }
@@ -162,79 +165,73 @@ export default function Patients() {
       })
       
       if (data.success) {
-        fetchPatients()
+        await fetchPatients()
         setShowPatientModal(false)
         setSelectedPatient(null)
         
-        // Eğer görüntüleme modalı açıksa, o hastayı güncelle
         if (showPatientViewModal && selectedPatient && selectedPatient._id === patientData._id) {
           setSelectedPatient(data.data || patientData)
         }
       }
     } catch (error) {
       console.error('Error saving patient:', error)
+      toast.error('فشل في حفظ بيانات المريض')
     } finally {
       setLoading(false)
     }
   }
 
   const handleDeletePatient = async (patientId) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذا المريض؟ هذا الإجراء لا يمكن التراجع عنه.')) {
+    if (!window.confirm('هل أنت متأكد من حذف هذا المريض وجميع مواعيده؟ هذا الإجراء لا يمكن التراجع عنه.')) {
       return
     }
     
     try {
-      setLoading(true)
-      const data = await apiRequest(`/api/patients/${patientId}`, {
-        method: 'DELETE',
-        showSuccess: true,
-        successMessage: 'تم حذف المريض بنجاح',
-        showError: true
-      })
+      setIsDeleting(true)
+      const data = await deletePatient(patientId)
       
       if (data.success) {
-        fetchPatients()
+        await fetchPatients()
         
-        // Eğer silinen hasta görüntüleniyorsa modalı kapat
         if (selectedPatient && selectedPatient._id === patientId) {
           setShowPatientViewModal(false)
           setSelectedPatient(null)
+          setPatientAppointments([])
         }
+        
+        toast.success(`تم حذف المريض و ${data.data?.deletedAppointments || 0} موعد`)
       }
     } catch (error) {
       console.error('Error deleting patient:', error)
+      toast.error('فشل في حذف المريض')
     } finally {
-      setLoading(false)
+      setIsDeleting(false)
     }
   }
 
   const handleSaveAppointment = async (appointmentData) => {
     try {
       setLoading(true)
-      const data = await apiRequest('/api/appointments', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...appointmentData,
-          patientId: selectedPatient?._id
-        }),
-        showSuccess: true,
-        successMessage: 'تم إضافة الموعد بنجاح',
-        showError: true
+      
+      const data = await createAppointment({
+        ...appointmentData,
+        patientId: selectedPatient?._id || appointmentData.patientId
       })
       
       if (data.success) {
         setShowAppointmentModal(false)
         
-        // Randevuları güncelle
         if (selectedPatient) {
           await fetchPatientAppointments(selectedPatient._id)
         }
         
-        // Hastalar listesini güncelle (randevu sayısı değişebilir)
-        fetchPatients()
+        await fetchPatients()
+        
+        toast.success('تم إضافة الموعد بنجاح')
       }
     } catch (error) {
       console.error('Error adding appointment:', error)
+      toast.error('فشل في إضافة الموعد')
     } finally {
       setLoading(false)
     }
@@ -247,10 +244,7 @@ export default function Patients() {
       await fetchPatientAppointments(patient._id)
     } catch (error) {
       console.error('Error viewing patient:', error)
-      toast.error('فشل في تحميل بيانات المريض', {
-        duration: 3000,
-        position: 'top-center'
-      })
+      toast.error('فشل في تحميل بيانات المريض')
     }
   }
 
@@ -273,33 +267,23 @@ export default function Patients() {
       maxAge: ''
     })
     setPagination(prev => ({ ...prev, page: 1 }))
-    toast.success('تم إعادة تعيين جميع الفلاتر', {
-      duration: 2000,
-      position: 'top-center'
-    })
+    toast.success('تم إعادة تعيين جميع الفلاتر')
   }
 
   const handlePageChange = (page) => {
     if (page < 1 || page > pagination.totalPages) return
     
     setPagination(prev => ({ ...prev, page }))
-    toast.success(`تم التحرك إلى الصفحة ${page}`, {
-      duration: 1000,
-      position: 'top-center'
-    })
+    toast.success(`تم التحرك إلى الصفحة ${page}`)
   }
 
   const handleRefresh = () => {
     fetchPatients()
-    toast.success('تم تحديث البيانات بنجاح', {
-      duration: 2000,
-      position: 'top-center'
-    })
+    toast.success('تم تحديث البيانات بنجاح')
   }
 
   return (
     <div className="space-y-6">
-      {/* Başlık ve Kontroller */}
       <div className="rounded-2xl border p-6 shadow-xl" style={{ 
         borderColor: colors.border,
         backgroundColor: colors.surface
@@ -316,7 +300,8 @@ export default function Patients() {
           <div className="flex items-center gap-3">
             <button
               onClick={handleRefresh}
-              className="px-4 py-2.5 rounded-xl text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center gap-2"
+              disabled={loading || isDeleting}
+              className="px-4 py-2.5 rounded-xl text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ 
                 borderColor: colors.borderLight,
                 color: colors.textLight,
@@ -334,7 +319,8 @@ export default function Patients() {
                 setSelectedPatient(null)
                 setShowPatientModal(true)
               }}
-              className="px-5 py-2.5 rounded-xl text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center gap-2 shadow-lg"
+              disabled={loading || isDeleting}
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ 
                 background: colors.gradientSuccess,
                 color: '#FFFFFF'
@@ -348,9 +334,7 @@ export default function Patients() {
           </div>
         </div>
 
-        {/* Filtreler */}
         <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-          {/* Arama */}
           <div className="md:col-span-2">
             <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>البحث</label>
             <div className="relative">
@@ -365,6 +349,7 @@ export default function Patients() {
                   color: colors.text
                 }}
                 placeholder="ابحث باسم المريض، رقم الهاتف أو البريد الإلكتروني"
+                disabled={loading}
               />
               <div className="absolute right-3 top-1/2 transform -translate-y-1/2" style={{ color: colors.textLight }}>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -374,7 +359,6 @@ export default function Patients() {
             </div>
           </div>
           
-          {/* Cinsiyet Filtresi */}
           <div>
             <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>الجنس</label>
             <select
@@ -386,6 +370,7 @@ export default function Patients() {
                 backgroundColor: colors.background,
                 color: colors.text
               }}
+              disabled={loading}
             >
               <option value="">الجميع</option>
               <option value="male">ذكر</option>
@@ -393,7 +378,6 @@ export default function Patients() {
             </select>
           </div>
           
-          {/* Randevu Filtresi */}
           <div>
             <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>المواعيد</label>
             <select
@@ -405,6 +389,7 @@ export default function Patients() {
                 backgroundColor: colors.background,
                 color: colors.text
               }}
+              disabled={loading}
             >
               <option value="">الجميع</option>
               <option value="true">لديه مواعيد</option>
@@ -412,7 +397,6 @@ export default function Patients() {
             </select>
           </div>
 
-          {/* Yaş Filtresi - Minimum */}
           <div>
             <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>العمر من</label>
             <input
@@ -428,10 +412,10 @@ export default function Patients() {
                 color: colors.text
               }}
               placeholder="0"
+              disabled={loading}
             />
           </div>
 
-          {/* Yaş Filtresi - Maksimum */}
           <div>
             <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>إلى</label>
             <input
@@ -447,11 +431,11 @@ export default function Patients() {
                 color: colors.text
               }}
               placeholder="120"
+              disabled={loading}
             />
           </div>
         </div>
 
-        {/* Filtre Butonları */}
         <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-4 border-t" style={{ borderColor: colors.border }}>
           <div className="flex items-center gap-2 text-sm" style={{ color: colors.textLight }}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -484,7 +468,8 @@ export default function Patients() {
           <div className="flex items-center gap-2">
             <button
               onClick={handleResetFilters}
-              className="px-4 py-2 rounded-lg border text-sm font-medium hover:opacity-90 transition-all active:scale-95 flex items-center gap-2"
+              disabled={loading}
+              className="px-4 py-2 rounded-lg border text-sm font-medium hover:opacity-90 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ 
                 borderColor: colors.borderLight,
                 color: colors.textLight,
@@ -499,7 +484,8 @@ export default function Patients() {
             
             <button
               onClick={() => fetchPatients()}
-              className="px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center gap-2"
+              disabled={loading}
+              className="px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ 
                 background: colors.gradientPrimary,
                 color: '#FFFFFF'
@@ -514,7 +500,6 @@ export default function Patients() {
         </div>
       </div>
 
-      {/* Yükleme Durumu */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-12 space-y-4">
           <LoadingSpinner />
@@ -531,10 +516,10 @@ export default function Patients() {
             setShowPatientModal(true)
           }}
           onDelete={handleDeletePatient}
+          disabled={isDeleting}
         />
       )}
 
-      {/* Modals */}
       {showPatientModal && (
         <PatientModal
           patient={selectedPatient}

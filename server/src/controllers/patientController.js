@@ -1,6 +1,6 @@
 const Patient = require("../models/Patient");
 const Appointment = require("../models/Appointment");
-// getAllPatients fonksiyonuna ek validasyon
+
 exports.getAllPatients = async (req, res) => {
   try {
     const {
@@ -16,16 +16,14 @@ exports.getAllPatients = async (req, res) => {
       sortOrder = "desc",
     } = req.query;
 
-    // Parametre validasyonu
-    const validatedPage = Math.max(1, parseInt(page) || 1)
-    const validatedLimit = Math.min(100, Math.max(1, parseInt(limit) || 10))
+    const validatedPage = Math.max(1, parseInt(page) || 1);
+    const validatedLimit = Math.min(100, Math.max(1, parseInt(limit) || 10));
     
-    const skip = (validatedPage - 1) * validatedLimit
+    const skip = (validatedPage - 1) * validatedLimit;
     let query = {};
 
-    // Search filter - SQL injection koruması
     if (search && typeof search === 'string') {
-      const safeSearch = search.replace(/[^\w\u0600-\u06FF\s@.-]/g, '')
+      const safeSearch = search.replace(/[^\w\u0600-\u06FF\s@.-]/g, '');
       if (safeSearch.length > 0) {
         query.$or = [
           { patientName: { $regex: safeSearch, $options: "i" } },
@@ -35,16 +33,14 @@ exports.getAllPatients = async (req, res) => {
       }
     }
 
-    // Gender filter - sadece geçerli değerler
     if (['male', 'female'].includes(gender)) {
       query.gender = gender;
     }
 
-    // Age filter - sayısal kontrol
     if (minAge || maxAge) {
       const today = new Date();
-      const minAgeNum = parseInt(minAge)
-      const maxAgeNum = parseInt(maxAge)
+      const minAgeNum = parseInt(minAge);
+      const maxAgeNum = parseInt(maxAge);
       
       if (minAgeNum && !isNaN(minAgeNum) && minAgeNum >= 0) {
         const minBirthDate = new Date(
@@ -65,14 +61,12 @@ exports.getAllPatients = async (req, res) => {
       }
     }
 
-    // Has appointments filter - boolean kontrol
     if (hasAppointments === "true") {
       query.appointmentCount = { $gt: 0 };
     } else if (hasAppointments === "false") {
       query.appointmentCount = 0;
     }
 
-    // Tarih formatı doğrulama
     if (lastVisit) {
       const date = new Date(lastVisit);
       if (!isNaN(date.getTime())) {
@@ -82,15 +76,13 @@ exports.getAllPatients = async (req, res) => {
       }
     }
 
-    // Sort alanı doğrulama
-    const allowedSortFields = ['patientName', 'createdAt', 'lastVisit', 'appointmentCount', 'birthDate']
-    const sortField = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt'
-    const sortOrderValue = sortOrder === 'asc' ? 1 : -1
+    const allowedSortFields = ['patientName', 'createdAt', 'lastVisit', 'appointmentCount', 'birthDate'];
+    const sortField = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
+    const sortOrderValue = sortOrder === 'asc' ? 1 : -1;
     
     const sort = {};
     sort[sortField] = sortOrderValue;
 
-    // Toplam sayıyı ve hastaları al
     const [total, patients] = await Promise.all([
       Patient.countDocuments(query),
       Patient.find(query)
@@ -98,9 +90,8 @@ exports.getAllPatients = async (req, res) => {
         .skip(skip)
         .limit(validatedLimit)
         .select('-__v')
-    ])
+    ]);
 
-    // Yaş hesapla ve veriyi hazırla
     const patientsWithAge = patients.map((patient) => {
       const patientObj = patient.toObject();
       patientObj.age = patient.age || null;
@@ -132,20 +123,17 @@ exports.getAllPatients = async (req, res) => {
   } catch (error) {
     console.error("Error fetching patients:", error);
     
-    // Hata türüne göre mesaj
     if (error.name === 'CastError') {
       return res.status(400).json({
         success: false,
         message: "معايير البحث غير صحيحة",
-        error: {
-          code: 'INVALID_FILTERS'
-        }
+        error: { code: 'INVALID_FILTERS' }
       });
     }
     
     res.status(500).json({
       success: false,
-      message: "فشل في تحميل بيانات المرضى. يرجى المحاولة مرة أخرى",
+      message: "فشل في تحميل بيانات المرضى",
       error: {
         code: 'SERVER_ERROR',
         details: process.env.NODE_ENV === 'development' ? error.message : undefined
@@ -154,11 +142,11 @@ exports.getAllPatients = async (req, res) => {
   }
 };
 
-
 exports.getPatientById = async (req, res) => {
   try {
-    const patient = await Patient.findById(req.params.id).select("-__v");
+    const { id } = req.params;
 
+    const patient = await Patient.findById(id).select("-__v");
     if (!patient) {
       return res.status(404).json({
         success: false,
@@ -166,7 +154,6 @@ exports.getPatientById = async (req, res) => {
       });
     }
 
-    // Get patient's appointments (sadece son 10 randevu)
     const appointments = await Appointment.find({ patientId: patient._id })
       .sort({ appointmentDate: -1 })
       .limit(10)
@@ -175,7 +162,8 @@ exports.getPatientById = async (req, res) => {
     const patientObj = patient.toObject();
     patientObj.age = patient.age;
     patientObj.appointments = appointments;
-    patientObj.appointmentStats = {
+    
+    const appointmentStats = {
       total: patient.appointmentCount || 0,
       upcoming: await Appointment.countDocuments({
         patientId: patient._id,
@@ -186,7 +174,25 @@ exports.getPatientById = async (req, res) => {
         patientId: patient._id,
         appointmentDate: { $lt: new Date() },
       }),
+      pending: await Appointment.countDocuments({
+        patientId: patient._id,
+        status: "pending",
+      }),
+      confirmed: await Appointment.countDocuments({
+        patientId: patient._id,
+        status: "confirmed",
+      }),
+      completed: await Appointment.countDocuments({
+        patientId: patient._id,
+        status: "completed",
+      }),
+      cancelled: await Appointment.countDocuments({
+        patientId: patient._id,
+        status: "cancelled",
+      }),
     };
+
+    patientObj.appointmentStats = appointmentStats;
 
     res.json({
       success: true,
@@ -205,7 +211,6 @@ exports.createPatient = async (req, res) => {
   try {
     const patientData = req.body;
 
-    // Check if patient already exists with same phone number
     const existingPatient = await Patient.findOne({
       phoneNumber: patientData.phoneNumber,
     });
@@ -214,6 +219,7 @@ exports.createPatient = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "مريض بهذا الرقم موجود بالفعل",
+        data: existingPatient,
       });
     }
 
@@ -237,6 +243,13 @@ exports.createPatient = async (req, res) => {
       });
     }
 
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "رقم الهاتف محجوز مسبقاً",
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: "فشل في إنشاء المريض",
@@ -246,8 +259,10 @@ exports.createPatient = async (req, res) => {
 
 exports.updatePatient = async (req, res) => {
   try {
-    const patient = await Patient.findById(req.params.id);
+    const { id } = req.params;
+    const updateData = req.body;
 
+    const patient = await Patient.findById(id);
     if (!patient) {
       return res.status(404).json({
         success: false,
@@ -255,10 +270,9 @@ exports.updatePatient = async (req, res) => {
       });
     }
 
-    // Check if phone number is being changed and if it conflicts
-    if (req.body.phoneNumber && req.body.phoneNumber !== patient.phoneNumber) {
+    if (updateData.phoneNumber && updateData.phoneNumber !== patient.phoneNumber) {
       const existingPatient = await Patient.findOne({
-        phoneNumber: req.body.phoneNumber,
+        phoneNumber: updateData.phoneNumber,
         _id: { $ne: patient._id },
       });
 
@@ -270,8 +284,23 @@ exports.updatePatient = async (req, res) => {
       }
     }
 
-    Object.assign(patient, req.body);
+    Object.assign(patient, updateData);
+    patient.updatedAt = new Date();
     await patient.save();
+
+    if (updateData.patientName || updateData.phoneNumber) {
+      const appointmentUpdate = {};
+      if (updateData.patientName) appointmentUpdate.patientName = updateData.patientName;
+      if (updateData.phoneNumber) appointmentUpdate.phoneNumber = updateData.phoneNumber;
+      
+      await Appointment.updateMany(
+        { patientId: patient._id },
+        { 
+          ...appointmentUpdate,
+          updatedAt: new Date()
+        }
+      );
+    }
 
     res.json({
       success: true,
@@ -299,8 +328,9 @@ exports.updatePatient = async (req, res) => {
 
 exports.deletePatient = async (req, res) => {
   try {
-    const patient = await Patient.findById(req.params.id);
+    const { id } = req.params;
 
+    const patient = await Patient.findById(id);
     if (!patient) {
       return res.status(404).json({
         success: false,
@@ -308,23 +338,15 @@ exports.deletePatient = async (req, res) => {
       });
     }
 
-    // Check if patient has appointments
-    const appointmentCount = await Appointment.countDocuments({
-      patientId: patient._id,
-    });
-
-    if (appointmentCount > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "لا يمكن حذف المريض لأنه لديه مواعيد مرتبطة",
-      });
-    }
-
-    await patient.deleteOne();
+    await Patient.findByIdAndDelete(id);
 
     res.json({
       success: true,
-      message: "تم حذف المريض بنجاح",
+      message: "تم حذف المريض وجميع مواعيده بنجاح",
+      data: {
+        deletedPatientId: id,
+        deletedAppointments: patient.appointmentCount,
+      },
     });
   } catch (error) {
     console.error("Error deleting patient:", error);
@@ -346,7 +368,6 @@ exports.bulkDeletePatients = async (req, res) => {
       });
     }
 
-    // Check if any patients have appointments
     const patientsWithAppointments = await Appointment.find({
       patientId: { $in: patientIds },
     }).distinct("patientId");
@@ -385,14 +406,12 @@ exports.getPatientStats = async (req, res) => {
     });
     const active = await Patient.countDocuments({ isActive: true });
 
-    // Last week visits
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
     const lastWeekVisits = await Patient.countDocuments({
       lastVisit: { $gte: weekAgo },
     });
 
-    // Age distribution
     const ageGroups = await Patient.aggregate([
       {
         $match: {
@@ -409,7 +428,7 @@ exports.getPatientStats = async (req, res) => {
                 $floor: {
                   $divide: [
                     { $subtract: [new Date(), "$birthDate"] },
-                    31557600000 // milliseconds in a year (365.25 days)
+                    31557600000
                   ]
                 }
               }
@@ -434,7 +453,6 @@ exports.getPatientStats = async (req, res) => {
       },
     ]);
 
-    // Monthly patient registration
     const monthlyRegistrations = await Patient.aggregate([
       {
         $group: {

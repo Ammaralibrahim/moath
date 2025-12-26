@@ -23,7 +23,7 @@ export default function PremiumBackupList({
   onPageChange 
 }) {
   const formatBytes = (bytes) => {
-    if (bytes === 0) return '0 Bytes'
+    if (!bytes || bytes === 0) return '0 Bytes'
     const k = 1024
     const sizes = ['Bytes', 'KB', 'MB', 'GB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
@@ -60,7 +60,13 @@ export default function PremiumBackupList({
     }
   }
 
-  if (backups.length === 0) {
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= pagination.pages) {
+      onPageChange(newPage)
+    }
+  }
+
+  if (!backups || backups.length === 0) {
     return (
       <div className="text-center py-16">
         <div className="w-24 h-24 mx-auto mb-6 rounded-2xl flex items-center justify-center" style={{ 
@@ -147,14 +153,14 @@ export default function PremiumBackupList({
                     </div>
                     <div>
                       <div className="font-semibold text-sm mb-1 group-hover:text-blue-300 transition-colors" style={{ color: colors.text }}>
-                        {backup.filename}
+                        {backup.filename || 'غير معروف'}
                       </div>
                       <div className="text-xs flex items-center gap-2" style={{ color: colors.textLight }}>
                         <span className="px-2 py-0.5 rounded text-xs" style={{ 
                           backgroundColor: colors.surface,
                           color: colors.textMuted
                         }}>
-                          ID: {backup._id.substring(0, 8)}...
+                          ID: {backup._id?.substring(0, 8) || 'N/A'}...
                         </span>
                       </div>
                     </div>
@@ -182,7 +188,7 @@ export default function PremiumBackupList({
                     </div>
                     <div>
                       <StatusBadge status={backup.status} />
-                      {backup.status === 'success' && (
+                      {backup.status === 'success' && backup.metadata && (
                         <div className="text-xs mt-1" style={{ color: colors.textLight }}>
                           {backup.metadata?.patients || 0} مريض • {backup.metadata?.appointments || 0} موعد
                         </div>
@@ -194,19 +200,19 @@ export default function PremiumBackupList({
                 {/* التاريخ */}
                 <td className="px-6 py-5">
                   <div className="text-sm font-semibold mb-1" style={{ color: colors.text }}>
-                    {new Date(backup.createdAt).toLocaleDateString('ar-EG', {
+                    {backup.createdAt ? new Date(backup.createdAt).toLocaleDateString('ar-EG', {
                       year: 'numeric',
                       month: 'long',
                       day: 'numeric'
-                    })}
+                    }) : 'غير معروف'}
                   </div>
                   <div className="text-xs flex items-center gap-1" style={{ color: colors.textLight }}>
                     <IconClock className="w-3 h-3" />
-                    {new Date(backup.createdAt).toLocaleTimeString('ar-EG', { 
+                    {backup.createdAt ? new Date(backup.createdAt).toLocaleTimeString('ar-EG', { 
                       hour: '2-digit', 
                       minute: '2-digit',
                       hour12: true
-                    })}
+                    }) : 'غير معروف'}
                   </div>
                 </td>
                 
@@ -224,7 +230,7 @@ export default function PremiumBackupList({
                         background: colors.gradientInfo,
                         color: '#FFFFFF'
                       }}>
-                        {formatBytes(backup.size).split(' ')[1].charAt(0)}
+                        {formatBytes(backup.size).split(' ')[1]?.charAt(0) || 'B'}
                       </div>
                     </div>
                     <div>
@@ -293,7 +299,7 @@ export default function PremiumBackupList({
         </table>
       </div>
 
-      {/* Premium Pagination - Aynı kalabilir */}
+      {/* Premium Pagination */}
       {pagination.pages > 1 && (
         <div className="p-6 border-t border-b flex items-center justify-between" style={{ 
           borderColor: colors.border,
@@ -314,7 +320,7 @@ export default function PremiumBackupList({
           <div className="flex items-center gap-2">
             {/* Previous Button */}
             <button
-              onClick={() => onPageChange(pagination.page - 1)}
+              onClick={() => handlePageChange(pagination.page - 1)}
               disabled={pagination.page === 1}
               className="px-4 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
               style={{ 
@@ -333,30 +339,30 @@ export default function PremiumBackupList({
             {/* Page Numbers */}
             <div className="flex items-center gap-1">
               {(() => {
-                const pages = [];
-                const maxVisible = 5;
+                const pages = []
+                const maxVisible = 5
                 
                 if (pagination.pages <= maxVisible) {
                   for (let i = 1; i <= pagination.pages; i++) {
-                    pages.push(i);
+                    pages.push(i)
                   }
                 } else {
                   if (pagination.page <= 3) {
-                    for (let i = 1; i <= 4; i++) pages.push(i);
-                    pages.push('...');
-                    pages.push(pagination.pages);
+                    for (let i = 1; i <= 4; i++) pages.push(i)
+                    pages.push('...')
+                    pages.push(pagination.pages)
                   } else if (pagination.page >= pagination.pages - 2) {
-                    pages.push(1);
-                    pages.push('...');
-                    for (let i = pagination.pages - 3; i <= pagination.pages; i++) pages.push(i);
+                    pages.push(1)
+                    pages.push('...')
+                    for (let i = pagination.pages - 3; i <= pagination.pages; i++) pages.push(i)
                   } else {
-                    pages.push(1);
-                    pages.push('...');
-                    pages.push(pagination.page - 1);
-                    pages.push(pagination.page);
-                    pages.push(pagination.page + 1);
-                    pages.push('...');
-                    pages.push(pagination.pages);
+                    pages.push(1)
+                    pages.push('...')
+                    pages.push(pagination.page - 1)
+                    pages.push(pagination.page)
+                    pages.push(pagination.page + 1)
+                    pages.push('...')
+                    pages.push(pagination.pages)
                   }
                 }
                 
@@ -368,7 +374,7 @@ export default function PremiumBackupList({
                   ) : (
                     <button
                       key={pageNum}
-                      onClick={() => onPageChange(pageNum)}
+                      onClick={() => handlePageChange(pageNum)}
                       className={`w-10 h-10 rounded-xl text-sm font-bold transition-all hover:scale-110 ${
                         pageNum === pagination.page 
                           ? 'shadow-lg scale-110' 
@@ -391,13 +397,13 @@ export default function PremiumBackupList({
                       {pageNum}
                     </button>
                   )
-                ));
+                ))
               })()}
             </div>
             
             {/* Next Button */}
             <button
-              onClick={() => onPageChange(pagination.page + 1)}
+              onClick={() => handlePageChange(pagination.page + 1)}
               disabled={pagination.page === pagination.pages}
               className="px-4 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
               style={{ 

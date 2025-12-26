@@ -2,7 +2,6 @@ const express = require("express");
 const router = express.Router();
 const backupController = require("../controllers/backupController");
 
-// Admin key kontrol middleware
 const verifyAdminKey = (req, res, next) => {
   const adminKey = req.headers['x-admin-key'];
   const validKey = process.env.ADMIN_API_KEY || 'admin123';
@@ -10,18 +9,18 @@ const verifyAdminKey = (req, res, next) => {
   if (!adminKey || adminKey !== validKey) {
     return res.status(401).json({
       success: false,
-      message: "غير مصرح بالوصول"
+      message: "غير مصرح بالوصول - مفتاح إداري غير صحيح"
     });
   }
   next();
 };
 
-// Backup yönetimi
-router.post("/", backupController.createBackup);
+router.post("/", verifyAdminKey, backupController.createBackup);
 router.get("/", backupController.listBackups);
 router.get("/stats", backupController.getBackupStats);
+router.get("/:id/preview", backupController.previewBackup);
 router.get("/:id/download", verifyAdminKey, backupController.downloadBackup);
-router.post("/:id/restore", backupController.restoreBackup);
-router.delete("/:id", backupController.deleteBackup);
+router.post("/:id/restore", verifyAdminKey, backupController.restoreBackup);
+router.delete("/:id", verifyAdminKey, backupController.deleteBackup);
 
 module.exports = router;

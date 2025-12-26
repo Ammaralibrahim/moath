@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { colors } from '@/components/shared/constants'
-import { calculateAge, formatDate } from '@/components/shared/utils'
+import { calculateAge, formatDate, formatPhoneNumber } from '@/components/shared/utils'
 
 export default function PatientViewModal({ 
   patient, 
@@ -14,31 +14,54 @@ export default function PatientViewModal({
   onRefreshAppointments 
 }) {
   const [activeTab, setActiveTab] = useState('details')
+  const [isLoading, setIsLoading] = useState(false)
 
   if (!patient) return null
 
   const formatDateDisplay = (date) => {
-    return date ? formatDate(date) : 'غير محدد'
+    if (!date) return 'غير محدد'
+    try {
+      return formatDate(date)
+    } catch (error) {
+      return 'غير محدد'
+    }
   }
 
   const calculateAgeFromBirthDate = (birthDate) => {
     if (!birthDate) return 'غير محدد'
-    return calculateAge(birthDate) + ' سنة'
+    try {
+      const age = calculateAge(birthDate)
+      return `${age} سنة`
+    } catch (error) {
+      return 'غير محدد'
+    }
   }
 
   // Tarihe göre sıralanmış randevular (en yeni önce)
   const sortedAppointments = [...appointments].sort((a, b) => {
-    return new Date(b.appointmentDate) - new Date(a.appointmentDate)
+    try {
+      return new Date(b.appointmentDate) - new Date(a.appointmentDate)
+    } catch (error) {
+      return 0
+    }
   })
 
   // Geçmiş ve gelecek randevuları ayır
   const now = new Date()
-  const pastAppointments = sortedAppointments.filter(app => 
-    new Date(app.appointmentDate) < now
-  )
-  const upcomingAppointments = sortedAppointments.filter(app => 
-    new Date(app.appointmentDate) >= now
-  )
+  const pastAppointments = sortedAppointments.filter(app => {
+    try {
+      return new Date(app.appointmentDate) < now
+    } catch (error) {
+      return false
+    }
+  })
+  const upcomingAppointments = sortedAppointments.filter(app => {
+    try {
+      return new Date(app.appointmentDate) >= now
+    } catch (error) {
+      return false
+    }
+  })
 
   // Duruma göre renk belirle
   const getStatusColor = (status) => {
@@ -51,37 +74,23 @@ export default function PatientViewModal({
     }
   }
 
-  // Seçenekler için veriler
-  const patientDetails = {
-    personal: [
-      { label: 'الجنس', value: patient.gender === 'male' ? 'ذكر' : 'أنثى' },
-      { label: 'العمر', value: calculateAgeFromBirthDate(patient.birthDate) },
-      { label: 'تاريخ الميلاد', value: formatDateDisplay(patient.birthDate) },
-      { label: 'الحالة الاجتماعية', value: patient.maritalStatus || 'غير محدد' },
-    ],
-    contact: [
-      { label: 'رقم الهاتف', value: patient.phoneNumber, icon: '📱' },
-      { label: 'البريد الإلكتروني', value: patient.email || 'غير محدد', icon: '📧' },
-      { label: 'جهة اتصال الطوارئ', value: patient.emergencyContact || 'غير محدد', icon: '🆘' },
-      { label: 'العنوان', value: patient.address || 'غير محدد', icon: '📍' },
-    ],
-    medical: [
-      { label: 'التاريخ الطبي', value: patient.medicalHistory || 'لا يوجد تاريخ طبي مسجل', type: 'textarea' },
-      { label: 'الحساسية', value: patient.allergies || 'لا توجد حساسية مسجلة', type: 'textarea' },
-      { label: 'الأدوية الحالية', value: patient.medications || 'لا توجد أدوية مسجلة', type: 'textarea' },
-      { label: 'ملاحظات إضافية', value: patient.notes || 'لا توجد ملاحظات إضافية', type: 'textarea' },
-    ]
-  }
-
-  const renderAppointmentCard = (appointment, index) => {
+  const renderAppointmentCard = useCallback((appointment, index) => {
     const status = getStatusColor(appointment.status)
-    const appointmentDate = new Date(appointment.appointmentDate)
-    const isPast = appointmentDate < now
+    let appointmentDate
+    let isPast = false
     
+    try {
+      appointmentDate = new Date(appointment.appointmentDate)
+      isPast = appointmentDate < now
+    } catch (error) {
+      appointmentDate = null
+      isPast = false
+    }
+
     return (
       <div 
         key={appointment._id || index} 
-        className="rounded-xl p-4 hover:scale-[1.01] transition-all" 
+        className="rounded-xl p-4 hover:scale-[1.01] transition-all duration-300" 
         style={{ 
           backgroundColor: colors.surfaceLight,
           border: `1px solid ${colors.border}`,
@@ -96,7 +105,7 @@ export default function PatientViewModal({
                 {formatDateDisplay(appointment.appointmentDate)}
               </span>
               <span className="text-sm" style={{ color: colors.textLight }}>
-                {appointment.appointmentTime}
+                {appointment.appointmentTime || 'غير محدد'}
               </span>
             </div>
             
@@ -143,13 +152,48 @@ export default function PatientViewModal({
               color: colors.primary,
               border: `1px solid ${colors.primary}`
             }}
+            onClick={() => {
+              // Burada randevu detaylarına yönlendirme yapılabilir
+              console.log('View appointment details:', appointment._id)
+            }}
           >
             التفاصيل
           </button>
         </div>
       </div>
     )
-  }
+  }, [now])
+
+  const handleClose = useCallback(() => {
+    if (!isLoading) {
+      onClose()
+    }
+  }, [isLoading, onClose])
+
+  const handleEdit = useCallback(() => {
+    if (!isLoading) {
+      onEdit()
+    }
+  }, [isLoading, onEdit])
+
+  const handleAddAppointment = useCallback(() => {
+    if (!isLoading) {
+      onAddAppointment()
+    }
+  }, [isLoading, onAddAppointment])
+
+  const handleRefreshAppointments = useCallback(async () => {
+    if (!isLoading && !loadingAppointments) {
+      setIsLoading(true)
+      try {
+        await onRefreshAppointments()
+      } catch (error) {
+        console.error('Error refreshing appointments:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+  }, [isLoading, loadingAppointments, onRefreshAppointments])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 bg-black/60 backdrop-blur-sm overflow-y-auto">
@@ -170,24 +214,25 @@ export default function PatientViewModal({
                   </svg>
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold" style={{ color: colors.text }}>{patient.patientName}</h2>
+                  <h2 className="text-xl font-bold" style={{ color: colors.text }}>{patient.patientName || 'غير معروف'}</h2>
                   <div className="flex items-center gap-4 mt-1">
                     <p className="text-sm" style={{ color: colors.textLight }}>
                       ID: <span className="font-mono bg-gray-100 px-2 py-0.5 rounded">{patient._id?.substring(0, 8) || 'N/A'}</span>
                     </p>
                     <div className="px-3 py-1 rounded-lg text-xs font-semibold" style={{ 
-                      backgroundColor: patient.isActive ? colors.success + '20' : colors.error + '20',
-                      color: patient.isActive ? colors.success : colors.error
+                      backgroundColor: patient.isActive !== false ? colors.success + '20' : colors.error + '20',
+                      color: patient.isActive !== false ? colors.success : colors.error
                     }}>
-                      {patient.isActive ? '🟢 نشط' : '🔴 غير نشط'}
+                      {patient.isActive !== false ? '🟢 نشط' : '🔴 غير نشط'}
                     </div>
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={onEdit}
-                  className="px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-all active:scale-95 flex items-center gap-2"
+                  onClick={handleEdit}
+                  disabled={isLoading}
+                  className="px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ 
                     border: `1px solid ${colors.border}`,
                     color: colors.text,
@@ -200,8 +245,9 @@ export default function PatientViewModal({
                   تعديل
                 </button>
                 <button
-                  onClick={onClose}
-                  className="p-2 rounded-lg hover:opacity-80 transition-opacity active:scale-95"
+                  onClick={handleClose}
+                  disabled={isLoading}
+                  className="p-2 rounded-lg hover:opacity-80 transition-opacity active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ 
                     backgroundColor: colors.surfaceLight,
                     color: colors.textLight
@@ -224,7 +270,8 @@ export default function PatientViewModal({
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${activeTab === tab.id ? '' : 'hover:opacity-80'}`}
+                  disabled={isLoading}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${activeTab === tab.id ? '' : 'hover:opacity-80'} disabled:opacity-50 disabled:cursor-not-allowed`}
                   style={{
                     backgroundColor: activeTab === tab.id ? colors.primary : 'transparent',
                     color: activeTab === tab.id ? '#FFFFFF' : colors.textLight
@@ -262,12 +309,24 @@ export default function PatientViewModal({
                     </div>
                     
                     <div className="space-y-4">
-                      {patientDetails.personal.map((item, index) => (
-                        <div key={index}>
-                          <div className="text-xs mb-1" style={{ color: colors.textLight }}>{item.label}</div>
-                          <div className="text-sm font-semibold" style={{ color: colors.text }}>{item.value}</div>
+                      <div>
+                        <div className="text-xs mb-1" style={{ color: colors.textLight }}>الجنس</div>
+                        <div className="text-sm font-semibold" style={{ color: colors.text }}>
+                          {patient.gender === 'male' ? 'ذكر' : patient.gender === 'female' ? 'أنثى' : 'غير محدد'}
                         </div>
-                      ))}
+                      </div>
+                      <div>
+                        <div className="text-xs mb-1" style={{ color: colors.textLight }}>العمر</div>
+                        <div className="text-sm font-semibold" style={{ color: colors.text }}>
+                          {calculateAgeFromBirthDate(patient.birthDate)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs mb-1" style={{ color: colors.textLight }}>تاريخ الميلاد</div>
+                        <div className="text-sm font-semibold" style={{ color: colors.text }}>
+                          {formatDateDisplay(patient.birthDate)}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -282,40 +341,111 @@ export default function PatientViewModal({
                     </div>
                     
                     <div className="space-y-4">
-                      {patientDetails.contact.map((item, index) => (
-                        <div key={index}>
-                          <div className="text-xs mb-1 flex items-center gap-2" style={{ color: colors.textLight }}>
-                            <span>{item.icon}</span>
-                            {item.label}
-                          </div>
-                          <div className="text-sm font-semibold p-2 rounded-lg" style={{ 
-                            backgroundColor: colors.background,
-                            color: colors.text
-                          }}>
-                            {item.value}
-                          </div>
+                      <div>
+                        <div className="text-xs mb-1 flex items-center gap-2" style={{ color: colors.textLight }}>
+                          <span>📱</span>
+                          رقم الهاتف
                         </div>
-                      ))}
+                        <div className="text-sm font-semibold p-2 rounded-lg" style={{ 
+                          backgroundColor: colors.background,
+                          color: colors.text
+                        }}>
+                          {formatPhoneNumber(patient.phoneNumber) || 'غير محدد'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs mb-1 flex items-center gap-2" style={{ color: colors.textLight }}>
+                          <span>📧</span>
+                          البريد الإلكتروني
+                        </div>
+                        <div className="text-sm font-semibold p-2 rounded-lg" style={{ 
+                          backgroundColor: colors.background,
+                          color: colors.text
+                        }}>
+                          {patient.email || 'غير محدد'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs mb-1 flex items-center gap-2" style={{ color: colors.textLight }}>
+                          <span>🆘</span>
+                          جهة اتصال الطوارئ
+                        </div>
+                        <div className="text-sm font-semibold p-2 rounded-lg" style={{ 
+                          backgroundColor: colors.background,
+                          color: colors.text
+                        }}>
+                          {patient.emergencyContact || 'غير محدد'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs mb-1 flex items-center gap-2" style={{ color: colors.textLight }}>
+                          <span>📍</span>
+                          العنوان
+                        </div>
+                        <div className="text-sm font-semibold p-2 rounded-lg" style={{ 
+                          backgroundColor: colors.background,
+                          color: colors.text
+                        }}>
+                          {patient.address || 'غير محدد'}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Right Columns - Medical Info */}
                 <div className="lg:col-span-2 space-y-6">
-                  {patientDetails.medical.map((item, index) => (
-                    <div key={index} className="rounded-2xl p-5 shadow-sm" style={{ 
-                      backgroundColor: colors.surfaceLight,
-                      border: `1px solid ${colors.border}`
+                  <div className="rounded-2xl p-5 shadow-sm" style={{ 
+                    backgroundColor: colors.surfaceLight,
+                    border: `1px solid ${colors.border}`
+                  }}>
+                    <h4 className="font-semibold text-base mb-4" style={{ color: colors.text }}>التاريخ الطبي</h4>
+                    <div className="text-sm whitespace-pre-line p-4 rounded-lg min-h-[120px]" style={{ 
+                      backgroundColor: colors.background,
+                      color: colors.text
                     }}>
-                      <h4 className="font-semibold text-base mb-4" style={{ color: colors.text }}>{item.label}</h4>
-                      <div className="text-sm whitespace-pre-line p-4 rounded-lg min-h-[120px]" style={{ 
-                        backgroundColor: colors.background,
-                        color: colors.text
-                      }}>
-                        {item.value}
-                      </div>
+                      {patient.medicalHistory || 'لا يوجد تاريخ طبي مسجل'}
                     </div>
-                  ))}
+                  </div>
+
+                  <div className="rounded-2xl p-5 shadow-sm" style={{ 
+                    backgroundColor: colors.surfaceLight,
+                    border: `1px solid ${colors.border}`
+                  }}>
+                    <h4 className="font-semibold text-base mb-4" style={{ color: colors.text }}>الحساسية</h4>
+                    <div className="text-sm whitespace-pre-line p-4 rounded-lg min-h-[120px]" style={{ 
+                      backgroundColor: colors.background,
+                      color: colors.text
+                    }}>
+                      {patient.allergies || 'لا توجد حساسية مسجلة'}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl p-5 shadow-sm" style={{ 
+                    backgroundColor: colors.surfaceLight,
+                    border: `1px solid ${colors.border}`
+                  }}>
+                    <h4 className="font-semibold text-base mb-4" style={{ color: colors.text }}>الأدوية الحالية</h4>
+                    <div className="text-sm whitespace-pre-line p-4 rounded-lg min-h-[120px]" style={{ 
+                      backgroundColor: colors.background,
+                      color: colors.text
+                    }}>
+                      {patient.medications || 'لا توجد أدوية مسجلة'}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl p-5 shadow-sm" style={{ 
+                    backgroundColor: colors.surfaceLight,
+                    border: `1px solid ${colors.border}`
+                  }}>
+                    <h4 className="font-semibold text-base mb-4" style={{ color: colors.text }}>ملاحظات إضافية</h4>
+                    <div className="text-sm whitespace-pre-line p-4 rounded-lg min-h-[120px]" style={{ 
+                      backgroundColor: colors.background,
+                      color: colors.text
+                    }}>
+                      {patient.notes || 'لا توجد ملاحظات إضافية'}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -333,14 +463,14 @@ export default function PatientViewModal({
                   </div>
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={onRefreshAppointments}
-                      className="px-3 py-2 rounded-lg text-sm hover:opacity-90 transition-all flex items-center gap-2"
+                      onClick={handleRefreshAppointments}
+                      disabled={isLoading || loadingAppointments}
+                      className="px-3 py-2 rounded-lg text-sm hover:opacity-90 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{ 
                         border: `1px solid ${colors.border}`,
                         color: colors.text,
                         backgroundColor: colors.surfaceLight
                       }}
-                      disabled={loadingAppointments}
                     >
                       <svg className={`w-4 h-4 ${loadingAppointments ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -348,8 +478,9 @@ export default function PatientViewModal({
                       تحديث
                     </button>
                     <button
-                      onClick={onAddAppointment}
-                      className="px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-all active:scale-95 flex items-center gap-2"
+                      onClick={handleAddAppointment}
+                      disabled={isLoading}
+                      className="px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{ 
                         background: colors.gradientPrimary,
                         color: '#FFFFFF'
@@ -375,7 +506,7 @@ export default function PatientViewModal({
                     </svg>
                     <p>لا توجد مواعيد مسجلة لهذا المريض</p>
                     <button
-                      onClick={onAddAppointment}
+                      onClick={handleAddAppointment}
                       className="mt-4 px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-all"
                       style={{ 
                         color: colors.primary,
@@ -472,7 +603,12 @@ export default function PatientViewModal({
               <div className="space-y-6">
                 <h4 className="font-semibold text-lg mb-6" style={{ color: colors.text }}>السجل الطبي الكامل</h4>
                 <div className="space-y-4">
-                  {patientDetails.medical.map((item, index) => (
+                  {[
+                    { label: 'التاريخ الطبي', value: patient.medicalHistory || 'لا يوجد تاريخ طبي مسجل' },
+                    { label: 'الحساسية', value: patient.allergies || 'لا توجد حساسية مسجلة' },
+                    { label: 'الأدوية الحالية', value: patient.medications || 'لا توجد أدوية مسجلة' },
+                    { label: 'ملاحظات إضافية', value: patient.notes || 'لا توجد ملاحظات إضافية' },
+                  ].map((item, index) => (
                     <div key={index} className="rounded-xl p-4" style={{ 
                       backgroundColor: colors.surfaceLight,
                       border: `1px solid ${colors.border}`
@@ -492,8 +628,9 @@ export default function PatientViewModal({
           <div className="p-6 border-t flex-shrink-0" style={{ borderColor: colors.border }}>
             <div className="flex flex-col sm:flex-row gap-3">
               <button
-                onClick={onClose}
-                className="flex-1 px-6 py-3 rounded-xl text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2"
+                onClick={handleClose}
+                disabled={isLoading}
+                className="flex-1 px-6 py-3 rounded-xl text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ 
                   background: colors.gradientPrimary,
                   color: '#FFFFFF'
@@ -507,8 +644,9 @@ export default function PatientViewModal({
               
               <div className="flex-1 grid grid-cols-2 gap-3">
                 <button
-                  onClick={onEdit}
-                  className="px-4 py-3 rounded-xl text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  onClick={handleEdit}
+                  disabled={isLoading}
+                  className="px-4 py-3 rounded-xl text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ 
                     border: `1px solid ${colors.border}`,
                     color: colors.text,
@@ -522,8 +660,9 @@ export default function PatientViewModal({
                 </button>
                 
                 <button
-                  onClick={onAddAppointment}
-                  className="px-4 py-3 rounded-xl text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  onClick={handleAddAppointment}
+                  disabled={isLoading}
+                  className="px-4 py-3 rounded-xl text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ 
                     border: `1px solid ${colors.border}`,
                     color: colors.text,

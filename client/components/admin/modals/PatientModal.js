@@ -18,6 +18,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
     notes: ''
   })
   const [errors, setErrors] = useState({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     if (patient) {
@@ -94,19 +95,29 @@ export default function PatientModal({ patient, onClose, onSave }) {
     return newErrors
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     const validationErrors = validateForm()
     
-    if (Object.keys(validationErrors).length === 0) {
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors)
+      return
+    }
+
+    setIsSubmitting(true)
+    
+    try {
       const patientData = {
         ...formData,
         birthDate: formData.birthDate ? new Date(formData.birthDate) : null,
         _id: patient?._id || null
       }
-      onSave(patientData)
-    } else {
-      setErrors(validationErrors)
+      
+      await onSave(patientData)
+    } catch (error) {
+      console.error('Error saving patient:', error)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -139,7 +150,8 @@ export default function PatientModal({ patient, onClose, onSave }) {
               </div>
               <button
                 onClick={onClose}
-                className="p-2 rounded-lg hover:opacity-80 transition-opacity"
+                disabled={isSubmitting}
+                className="p-2 rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ 
                   backgroundColor: colors.surfaceLight,
                   color: colors.textLight
@@ -154,7 +166,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
           
           {/* Scrollable Content */}
           <div className="flex-1 overflow-y-auto p-6">
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} id="patient-form">
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 {/* Left Column - Personal Information */}
                 <div className="space-y-6">
@@ -181,6 +193,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
                             color: colors.text
                           }}
                           placeholder="أدخل اسم المريض الكامل"
+                          disabled={isSubmitting}
                         />
                         {errors.patientName && (
                           <p className="text-red-500 text-sm mt-2 flex items-center gap-2">
@@ -209,6 +222,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
                               color: colors.text
                             }}
                             placeholder="05XXXXXXXXX"
+                            disabled={isSubmitting}
                           />
                           {errors.phoneNumber && (
                             <p className="text-red-500 text-sm mt-2">{errors.phoneNumber}</p>
@@ -230,6 +244,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
                               color: colors.text
                             }}
                             placeholder="example@domain.com"
+                            disabled={isSubmitting}
                           />
                           {errors.email && (
                             <p className="text-red-500 text-sm mt-2">{errors.email}</p>
@@ -255,6 +270,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
                                 backgroundColor: colors.background,
                                 color: colors.text
                               }}
+                              disabled={isSubmitting}
                             />
                             <div className="absolute left-4 top-1/2 transform -translate-y-1/2" style={{ color: colors.textLight }}>
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -274,11 +290,11 @@ export default function PatientModal({ patient, onClose, onSave }) {
                           <div className="grid grid-cols-2 gap-3">
                             {[
                               { value: 'male', label: 'ذكر', icon: '👨', color: colors.primary },
-                              { value: 'female', label: 'أنثى', icon: '👩', color: colors.pink },
+                              { value: 'female', label: 'أنثى', icon: '👩', color: colors.pink || colors.primary },
                             ].map((option) => (
                               <label 
                                 key={option.value} 
-                                className={`flex items-center justify-center gap-2 p-4 rounded-xl cursor-pointer transition-all ${formData.gender === option.value ? 'ring-2 ring-offset-2' : ''}`}
+                                className={`flex items-center justify-center gap-2 p-4 rounded-xl cursor-pointer transition-all ${formData.gender === option.value ? 'ring-2 ring-offset-2' : ''} ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 style={{ 
                                   border: `2px solid ${formData.gender === option.value ? option.color : colors.border}`,
                                   backgroundColor: formData.gender === option.value ? `${option.color}15` : colors.surfaceLight
@@ -291,6 +307,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
                                   checked={formData.gender === option.value}
                                   onChange={handleChange}
                                   className="sr-only"
+                                  disabled={isSubmitting}
                                 />
                                 <span className="text-xl">{option.icon}</span>
                                 <span className="text-sm font-semibold" style={{ color: colors.text }}>{option.label}</span>
@@ -317,6 +334,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
                             color: colors.text
                           }}
                           placeholder="رقم هاتف جهة اتصال الطوارئ"
+                          disabled={isSubmitting}
                         />
                       </div>
 
@@ -338,6 +356,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
                               color: colors.text
                             }}
                             placeholder="العنوان الكامل"
+                            disabled={isSubmitting}
                           />
                           <div className="absolute bottom-4 right-4 text-sm px-3 py-1 rounded-lg" style={{ 
                             backgroundColor: colors.surface,
@@ -384,6 +403,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
                               color: colors.text
                             }}
                             placeholder="أدخل التاريخ الطبي الكامل للمريض..."
+                            disabled={isSubmitting}
                           />
                           <div className="absolute bottom-4 right-4 text-sm px-3 py-1 rounded-lg" style={{ 
                             backgroundColor: colors.surface,
@@ -415,6 +435,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
                               color: colors.text
                             }}
                             placeholder="الحساسية المعروفة للمريض (أدوية، أطعمة، مواد أخرى)"
+                            disabled={isSubmitting}
                           />
                           <div className="absolute bottom-4 right-4 text-sm px-3 py-1 rounded-lg" style={{ 
                             backgroundColor: colors.surface,
@@ -446,6 +467,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
                               color: colors.text
                             }}
                             placeholder="الأدوية التي يتناولها المريض حالياً (الجرعة، التكرار)"
+                            disabled={isSubmitting}
                           />
                           <div className="absolute bottom-4 right-4 text-sm px-3 py-1 rounded-lg" style={{ 
                             backgroundColor: colors.surface,
@@ -477,6 +499,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
                               color: colors.text
                             }}
                             placeholder="ملاحظات إضافية عن المريض (عادات، سلوكيات، معلومات أخرى)"
+                            disabled={isSubmitting}
                           />
                           <div className="absolute bottom-4 right-4 text-sm px-3 py-1 rounded-lg" style={{ 
                             backgroundColor: colors.surface,
@@ -502,7 +525,8 @@ export default function PatientModal({ patient, onClose, onSave }) {
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 px-6 py-3.5 rounded-xl text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2"
+                disabled={isSubmitting}
+                className="flex-1 px-6 py-3.5 rounded-xl text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ 
                   border: `2px solid ${colors.border}`,
                   color: colors.textLight,
@@ -516,17 +540,27 @@ export default function PatientModal({ patient, onClose, onSave }) {
               </button>
               <button
                 type="submit"
-                onClick={handleSubmit}
-                className="flex-1 px-6 py-3.5 rounded-xl text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg"
+                form="patient-form"
+                disabled={isSubmitting}
+                className="flex-1 px-6 py-3.5 rounded-xl text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ 
                   background: colors.gradientSuccess,
                   color: '#FFFFFF'
                 }}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                {patient ? 'تحديث البيانات' : 'إنشاء المريض'}
+                {isSubmitting ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    جاري الحفظ...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    {patient ? 'تحديث البيانات' : 'إنشاء المريض'}
+                  </>
+                )}
               </button>
             </div>
           </div>

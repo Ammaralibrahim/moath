@@ -6,8 +6,9 @@ import CalendarView from './CalendarView'
 import Filters from './Filters'
 import AppointmentModal from './modals/AppointmentModal'
 import { colors } from '@/components/shared/constants'
-import { apiRequest } from '@/components/shared/api'
+import { apiRequest, createAppointment, updateAppointment, deleteAppointment } from '@/components/shared/api'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import toast from 'react-hot-toast'
 
 export default function Appointments() {
   const [appointments, setAppointments] = useState([])
@@ -36,13 +37,14 @@ export default function Appointments() {
       if (filters.patientName) queryParams.append('patientName', filters.patientName)
       if (filters.phoneNumber) queryParams.append('phoneNumber', filters.phoneNumber)
       
-      const data = await apiRequest(`/api/admin/appointments?${queryParams}`)
+      const data = await apiRequest(`/api/appointments?${queryParams}`)
       
       if (data.success) {
         setAppointments(data.data || [])
       }
     } catch (error) {
       console.error('Error fetching appointments:', error)
+      toast.error('فشل في تحميل المواعيد')
     } finally {
       setLoading(false)
     }
@@ -70,23 +72,23 @@ export default function Appointments() {
   const handleSaveAppointment = async (appointmentData) => {
     try {
       setLoading(true)
-      const method = appointmentData._id ? 'PUT' : 'POST'
-      const url = appointmentData._id 
-        ? `/api/admin/appointments/${appointmentData._id}`
-        : '/api/admin/appointments'
       
-      const data = await apiRequest(url, {
-        method,
-        body: JSON.stringify(appointmentData)
-      })
+      let data
+      if (appointmentData._id) {
+        data = await updateAppointment(appointmentData._id, appointmentData)
+      } else {
+        data = await createAppointment(appointmentData)
+      }
       
       if (data.success) {
         fetchAppointments()
         setShowAppointmentModal(false)
         setSelectedAppointment(null)
+        toast.success(appointmentData._id ? 'تم تحديث الموعد بنجاح' : 'تم إضافة الموعد بنجاح')
       }
     } catch (error) {
       console.error('Error saving appointment:', error)
+      toast.error('فشل في حفظ الموعد')
     } finally {
       setLoading(false)
     }
@@ -96,15 +98,15 @@ export default function Appointments() {
     if (window.confirm('هل أنت متأكد من حذف هذا الموعد؟')) {
       try {
         setLoading(true)
-        const data = await apiRequest(`/api/admin/appointments/${appointmentId}`, {
-          method: 'DELETE'
-        })
+        const data = await deleteAppointment(appointmentId)
         
         if (data.success) {
           fetchAppointments()
+          toast.success('تم حذف الموعد بنجاح')
         }
       } catch (error) {
         console.error('Error deleting appointment:', error)
+        toast.error('فشل في حذف الموعد')
       } finally {
         setLoading(false)
       }
