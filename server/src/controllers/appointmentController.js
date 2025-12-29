@@ -43,6 +43,12 @@ exports.createAppointment = async (req, res) => {
       appointmentDate,
       appointmentTime,
       notes,
+      diagnosis,
+      prescription,
+      doctorSuggestions,
+      testResults,
+      followUpDate,
+      followUpNotes,
       patientId,
     } = req.body;
 
@@ -88,6 +94,12 @@ exports.createAppointment = async (req, res) => {
       appointmentDate: new Date(appointmentDate),
       appointmentTime,
       notes: notes || "",
+      diagnosis: diagnosis || "",
+      prescription: prescription || "",
+      doctorSuggestions: doctorSuggestions || "",
+      testResults: testResults || [],
+      followUpDate: followUpDate ? new Date(followUpDate) : null,
+      followUpNotes: followUpNotes || "",
       status: "pending",
       patientId: patient._id,
     });
@@ -95,7 +107,7 @@ exports.createAppointment = async (req, res) => {
     await appointment.save();
 
     const populatedAppointment = await Appointment.findById(appointment._id)
-      .populate('patientId', 'patientName phoneNumber birthDate gender email');
+      .populate('patientId', 'patientName phoneNumber birthDate gender email bloodType chronicDiseases');
 
     res.status(201).json({
       success: true,
@@ -128,6 +140,7 @@ exports.createAppointment = async (req, res) => {
     });
   }
 };
+
 
 exports.getAdminAppointments = async (req, res) => {
   try {
@@ -496,7 +509,20 @@ exports.getFilteredAppointments = async (req, res) => {
 exports.updateAppointment = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, notes, patientName, phoneNumber, appointmentDate, appointmentTime } = req.body;
+    const { 
+      status, 
+      notes, 
+      patientName, 
+      phoneNumber, 
+      appointmentDate, 
+      appointmentTime,
+      diagnosis,
+      prescription,
+      doctorSuggestions,
+      testResults,
+      followUpDate,
+      followUpNotes 
+    } = req.body;
 
     const appointment = await Appointment.findById(id);
     if (!appointment) {
@@ -535,6 +561,12 @@ exports.updateAppointment = async (req, res) => {
     if (appointmentTime) updateData.appointmentTime = appointmentTime;
     if (patientName) updateData.patientName = patientName;
     if (phoneNumber) updateData.phoneNumber = phoneNumber;
+    if (diagnosis !== undefined) updateData.diagnosis = diagnosis;
+    if (prescription !== undefined) updateData.prescription = prescription;
+    if (doctorSuggestions !== undefined) updateData.doctorSuggestions = doctorSuggestions;
+    if (testResults !== undefined) updateData.testResults = testResults;
+    if (followUpDate !== undefined) updateData.followUpDate = followUpDate ? new Date(followUpDate) : null;
+    if (followUpNotes !== undefined) updateData.followUpNotes = followUpNotes;
     
     updateData.updatedAt = new Date();
 
@@ -542,7 +574,7 @@ exports.updateAppointment = async (req, res) => {
       id,
       updateData,
       { new: true, runValidators: true }
-    ).populate("patientId", "patientName phoneNumber birthDate gender email");
+    ).populate("patientId", "patientName phoneNumber birthDate gender email bloodType chronicDiseases");
 
     if (appointment.patientId && (patientName || phoneNumber)) {
       const patientUpdate = {};
@@ -580,6 +612,7 @@ exports.updateAppointment = async (req, res) => {
     });
   }
 };
+
 
 exports.deleteAppointment = async (req, res) => {
   try {

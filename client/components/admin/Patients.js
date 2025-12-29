@@ -19,7 +19,10 @@ export default function Patients() {
     gender: '',
     hasAppointments: '',
     minAge: '',
-    maxAge: ''
+    maxAge: '',
+    bloodType: '',
+    hasChronicDiseases: '',
+    hasTestResults: ''
   })
   const [pagination, setPagination] = useState({
     page: 1,
@@ -264,7 +267,10 @@ export default function Patients() {
       gender: '',
       hasAppointments: '',
       minAge: '',
-      maxAge: ''
+      maxAge: '',
+      bloodType: '',
+      hasChronicDiseases: '',
+      hasTestResults: ''
     })
     setPagination(prev => ({ ...prev, page: 1 }))
     toast.success('تم إعادة تعيين جميع الفلاتر')
@@ -334,7 +340,7 @@ export default function Patients() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-8 gap-4">
           <div className="md:col-span-2">
             <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>البحث</label>
             <div className="relative">
@@ -379,6 +385,31 @@ export default function Patients() {
           </div>
           
           <div>
+            <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>فصيلة الدم</label>
+            <select
+              value={filters.bloodType}
+              onChange={(e) => handleFilterChange('bloodType', e.target.value)}
+              className="w-full px-4 py-2.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+              style={{ 
+                borderColor: colors.border,
+                backgroundColor: colors.background,
+                color: colors.text
+              }}
+              disabled={loading}
+            >
+              <option value="">الجميع</option>
+              <option value="A+">A+</option>
+              <option value="A-">A-</option>
+              <option value="B+">B+</option>
+              <option value="B-">B-</option>
+              <option value="AB+">AB+</option>
+              <option value="AB-">AB-</option>
+              <option value="O+">O+</option>
+              <option value="O-">O-</option>
+            </select>
+          </div>
+
+          <div>
             <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>المواعيد</label>
             <select
               value={filters.hasAppointments}
@@ -394,6 +425,44 @@ export default function Patients() {
               <option value="">الجميع</option>
               <option value="true">لديه مواعيد</option>
               <option value="false">بدون مواعيد</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>الأمراض المزمنة</label>
+            <select
+              value={filters.hasChronicDiseases}
+              onChange={(e) => handleFilterChange('hasChronicDiseases', e.target.value)}
+              className="w-full px-4 py-2.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+              style={{ 
+                borderColor: colors.border,
+                backgroundColor: colors.background,
+                color: colors.text
+              }}
+              disabled={loading}
+            >
+              <option value="">الجميع</option>
+              <option value="true">لديه أمراض مزمنة</option>
+              <option value="false">بدون أمراض مزمنة</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>الفحوصات</label>
+            <select
+              value={filters.hasTestResults}
+              onChange={(e) => handleFilterChange('hasTestResults', e.target.value)}
+              className="w-full px-4 py-2.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+              style={{ 
+                borderColor: colors.border,
+                backgroundColor: colors.background,
+                color: colors.text
+              }}
+              disabled={loading}
+            >
+              <option value="">الجميع</option>
+              <option value="true">لديه فحوصات</option>
+              <option value="false">بدون فحوصات</option>
             </select>
           </div>
 
@@ -450,6 +519,9 @@ export default function Patients() {
                 }}>
                   {key === 'gender' ? (value === 'male' ? 'ذكر' : 'أنثى') : 
                    key === 'hasAppointments' ? (value === 'true' ? 'لديه مواعيد' : 'بدون مواعيد') :
+                   key === 'bloodType' ? `فصيلة الدم: ${value}` :
+                   key === 'hasChronicDiseases' ? (value === 'true' ? 'أمراض مزمنة' : 'بدون أمراض') :
+                   key === 'hasTestResults' ? (value === 'true' ? 'لديه فحوصات' : 'بدون فحوصات') :
                    key === 'minAge' ? `من ${value} سنة` :
                    key === 'maxAge' ? `إلى ${value} سنة` : value}
                 </span>

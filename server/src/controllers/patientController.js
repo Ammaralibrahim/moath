@@ -11,7 +11,9 @@ exports.getAllPatients = async (req, res) => {
       minAge = "",
       maxAge = "",
       hasAppointments = "",
-      lastVisit = "",
+      bloodType = "",
+      hasChronicDiseases = "",
+      hasTestResults = "",
       sortBy = "createdAt",
       sortOrder = "desc",
     } = req.query;
@@ -67,16 +69,23 @@ exports.getAllPatients = async (req, res) => {
       query.appointmentCount = 0;
     }
 
-    if (lastVisit) {
-      const date = new Date(lastVisit);
-      if (!isNaN(date.getTime())) {
-        const nextDay = new Date(date);
-        nextDay.setDate(nextDay.getDate() + 1);
-        query.lastVisit = { $gte: date, $lt: nextDay };
-      }
+    if (bloodType && bloodType !== "") {
+      query.bloodType = bloodType;
     }
 
-    const allowedSortFields = ['patientName', 'createdAt', 'lastVisit', 'appointmentCount', 'birthDate'];
+    if (hasChronicDiseases === "true") {
+      query['chronicDiseases.0'] = { $exists: true };
+    } else if (hasChronicDiseases === "false") {
+      query.chronicDiseases = { $size: 0 };
+    }
+
+    if (hasTestResults === "true") {
+      query['testResults.0'] = { $exists: true };
+    } else if (hasTestResults === "false") {
+      query.testResults = { $size: 0 };
+    }
+
+    const allowedSortFields = ['patientName', 'createdAt', 'lastVisit', 'appointmentCount', 'birthDate', 'lastDoctorVisit', 'lastTestDate'];
     const sortField = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
     const sortOrderValue = sortOrder === 'asc' ? 1 : -1;
     
@@ -101,6 +110,12 @@ exports.getAllPatients = async (req, res) => {
       patientObj.formattedLastVisit = patient.lastVisit
         ? new Date(patient.lastVisit).toLocaleDateString('ar-SA')
         : null;
+      patientObj.formattedLastDoctorVisit = patient.lastDoctorVisit
+        ? new Date(patient.lastDoctorVisit).toLocaleDateString('ar-SA')
+        : null;
+      patientObj.formattedLastTestDate = patient.lastTestDate
+        ? new Date(patient.lastTestDate).toLocaleDateString('ar-SA')
+        : null;
       return patientObj;
     });
 
@@ -117,7 +132,10 @@ exports.getAllPatients = async (req, res) => {
         gender: gender || null,
         minAge: minAge || null,
         maxAge: maxAge || null,
-        hasAppointments: hasAppointments || null
+        hasAppointments: hasAppointments || null,
+        bloodType: bloodType || null,
+        hasChronicDiseases: hasChronicDiseases || null,
+        hasTestResults: hasTestResults || null
       }
     });
   } catch (error) {
@@ -194,6 +212,20 @@ exports.getPatientById = async (req, res) => {
 
     patientObj.appointmentStats = appointmentStats;
 
+    // Format dates for better display
+    patientObj.formattedBirthDate = patient.birthDate 
+      ? new Date(patient.birthDate).toISOString().split('T')[0]
+      : null;
+    patientObj.formattedLastVisit = patient.lastVisit
+      ? new Date(patient.lastVisit).toLocaleDateString('ar-SA')
+      : null;
+    patientObj.formattedLastDoctorVisit = patient.lastDoctorVisit
+      ? new Date(patient.lastDoctorVisit).toLocaleDateString('ar-SA')
+      : null;
+    patientObj.formattedLastTestDate = patient.lastTestDate
+      ? new Date(patient.lastTestDate).toLocaleDateString('ar-SA')
+      : null;
+
     res.json({
       success: true,
       data: patientObj,
@@ -221,6 +253,35 @@ exports.createPatient = async (req, res) => {
         message: "مريض بهذا الرقم موجود بالفعل",
         data: existingPatient,
       });
+    }
+
+    // Format dates if present
+    if (patientData.birthDate) {
+      patientData.birthDate = new Date(patientData.birthDate);
+    }
+
+    // Format chronic diseases dates
+    if (patientData.chronicDiseases && Array.isArray(patientData.chronicDiseases)) {
+      patientData.chronicDiseases = patientData.chronicDiseases.map(disease => ({
+        ...disease,
+        diagnosisDate: disease.diagnosisDate ? new Date(disease.diagnosisDate) : null
+      }));
+    }
+
+    // Format test results dates
+    if (patientData.testResults && Array.isArray(patientData.testResults)) {
+      patientData.testResults = patientData.testResults.map(test => ({
+        ...test,
+        testDate: test.testDate ? new Date(test.testDate) : new Date()
+      }));
+      
+      // Set lastTestDate to the latest test date
+      const latestTestDate = patientData.testResults.reduce((latest, test) => {
+        return test.testDate && test.testDate > latest ? test.testDate : latest;
+      }, null);
+      if (latestTestDate) {
+        patientData.lastTestDate = latestTestDate;
+      }
     }
 
     const patient = new Patient(patientData);
@@ -253,6 +314,7 @@ exports.createPatient = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "فشل في إنشاء المريض",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -282,6 +344,41 @@ exports.updatePatient = async (req, res) => {
           message: "رقم الهاتف محجوز مسبقاً لمريض آخر",
         });
       }
+    }
+
+    // Format dates if present
+    if (updateData.birthDate) {
+      updateData.birthDate = new Date(updateData.birthDate);
+    }
+
+    // Format chronic diseases dates
+    if (updateData.chronicDiseases && Array.isArray(updateData.chronicDiseases)) {
+      updateData.chronicDiseases = updateData.chronicDiseases.map(disease => ({
+        ...disease,
+        diagnosisDate: disease.diagnosisDate ? new Date(disease.diagnosisDate) : null
+      }));
+    }
+
+    // Format test results dates and update lastTestDate
+    if (updateData.testResults && Array.isArray(updateData.testResults)) {
+      updateData.testResults = updateData.testResults.map(test => ({
+        ...test,
+        testDate: test.testDate ? new Date(test.testDate) : new Date()
+      }));
+      
+      // Find the latest test date
+      const latestTestDate = updateData.testResults.reduce((latest, test) => {
+        return test.testDate && test.testDate > latest ? test.testDate : latest;
+      }, patient.lastTestDate || null);
+      
+      if (latestTestDate) {
+        updateData.lastTestDate = latestTestDate;
+      }
+    }
+
+    // If doctor suggestions are updated and patient has lastDoctorVisit, keep it
+    if (updateData.doctorSuggestions && !updateData.lastDoctorVisit && patient.lastDoctorVisit) {
+      updateData.lastDoctorVisit = patient.lastDoctorVisit;
     }
 
     Object.assign(patient, updateData);
@@ -322,6 +419,7 @@ exports.updatePatient = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "فشل في تحديث بيانات المريض",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -412,6 +510,34 @@ exports.getPatientStats = async (req, res) => {
       lastVisit: { $gte: weekAgo },
     });
 
+    // Blood type statistics
+    const bloodTypeStats = await Patient.aggregate([
+      {
+        $group: {
+          _id: "$bloodType",
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      }
+    ]);
+
+    // Patients with chronic diseases
+    const withChronicDiseases = await Patient.countDocuments({
+      'chronicDiseases.0': { $exists: true }
+    });
+
+    // Patients with test results
+    const withTestResults = await Patient.countDocuments({
+      'testResults.0': { $exists: true }
+    });
+
+    // Patients with doctor suggestions
+    const withDoctorSuggestions = await Patient.countDocuments({
+      doctorSuggestions: { $exists: true, $ne: '' }
+    });
+
     const ageGroups = await Patient.aggregate([
       {
         $match: {
@@ -476,6 +602,10 @@ exports.getPatientStats = async (req, res) => {
         withAppointments,
         active,
         lastWeekVisits,
+        bloodTypeStats,
+        withChronicDiseases,
+        withTestResults,
+        withDoctorSuggestions,
         ageGroups,
         monthlyRegistrations,
       },
@@ -492,16 +622,17 @@ exports.getPatientStats = async (req, res) => {
 
 exports.searchPatients = async (req, res) => {
   try {
-    const query = req.params.query;
+    const { query } = req.params;
 
     const patients = await Patient.find({
       $or: [
         { patientName: { $regex: query, $options: "i" } },
         { phoneNumber: { $regex: query, $options: "i" } },
+        { email: { $regex: query, $options: "i" } },
       ],
     })
       .limit(10)
-      .select("patientName phoneNumber birthDate gender");
+      .select("patientName phoneNumber birthDate gender bloodType testResults chronicDiseases");
 
     const patientsWithAge = patients.map((patient) => {
       const patientObj = patient.toObject();
@@ -518,6 +649,116 @@ exports.searchPatients = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "فشل في البحث عن المرضى",
+    });
+  }
+};
+
+exports.addTestResult = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const testResult = req.body;
+
+    const patient = await Patient.findById(id);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "المريض غير موجود",
+      });
+    }
+
+    // Format test date
+    if (testResult.testDate) {
+      testResult.testDate = new Date(testResult.testDate);
+    } else {
+      testResult.testDate = new Date();
+    }
+
+    patient.testResults.push(testResult);
+    patient.lastTestDate = testResult.testDate;
+    patient.updatedAt = new Date();
+    
+    await patient.save();
+
+    res.json({
+      success: true,
+      message: "تم إضافة نتيجة الفحص بنجاح",
+      data: patient,
+    });
+  } catch (error) {
+    console.error("Error adding test result:", error);
+    res.status(500).json({
+      success: false,
+      message: "فشل في إضافة نتيجة الفحص",
+    });
+  }
+};
+
+exports.addChronicDisease = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const chronicDisease = req.body;
+
+    const patient = await Patient.findById(id);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "المريض غير موجود",
+      });
+    }
+
+    // Format diagnosis date
+    if (chronicDisease.diagnosisDate) {
+      chronicDisease.diagnosisDate = new Date(chronicDisease.diagnosisDate);
+    }
+
+    patient.chronicDiseases.push(chronicDisease);
+    patient.updatedAt = new Date();
+    
+    await patient.save();
+
+    res.json({
+      success: true,
+      message: "تم إضافة المرض المزمن بنجاح",
+      data: patient,
+    });
+  } catch (error) {
+    console.error("Error adding chronic disease:", error);
+    res.status(500).json({
+      success: false,
+      message: "فشل في إضافة المرض المزمن",
+    });
+  }
+};
+
+exports.updateDoctorSuggestions = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { doctorSuggestions } = req.body;
+
+    const patient = await Patient.findById(id);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "المريض غير موجود",
+      });
+    }
+
+    patient.doctorSuggestions = doctorSuggestions;
+    patient.lastDoctorVisit = new Date();
+    patient.updatedAt = new Date();
+    
+    await patient.save();
+
+    res.json({
+      success: true,
+      message: "تم تحديث توصيات الطبيب بنجاح",
+      data: patient,
+    });
+  } catch (error) {
+    console.error("Error updating doctor suggestions:", error);
+    res.status(500).json({
+      success: false,
+      message: "فشل في تحديث توصيات الطبيب",
     });
   }
 };

@@ -1,5 +1,33 @@
 const mongoose = require("mongoose");
 
+const TestResultSchema = new mongoose.Schema({
+  testName: {
+    type: String,
+    trim: true,
+    maxlength: [200, "اسم الفحص يجب ألا يتجاوز 200 حرف"],
+  },
+  result: {
+    type: String,
+    trim: true,
+    maxlength: [500, "نتيجة الفحص يجب ألا تتجاوز 500 حرف"],
+  },
+  normalRange: {
+    type: String,
+    trim: true,
+    maxlength: [200, "المعدل الطبيعي يجب ألا يتجاوز 200 حرف"],
+  },
+  unit: {
+    type: String,
+    trim: true,
+    maxlength: [50, "الوحدة يجب ألا تتجاوز 50 حرف"],
+  },
+  notes: {
+    type: String,
+    trim: true,
+    maxlength: [500, "ملاحظات الفحص يجب ألا تتجاوز 500 حرف"],
+  },
+});
+
 const AppointmentSchema = new mongoose.Schema({
   patientName: {
     type: String,
@@ -47,6 +75,37 @@ const AppointmentSchema = new mongoose.Schema({
     maxlength: [500, "الملاحظات يجب ألا تتجاوز 500 حرف"],
     default: "",
   },
+  diagnosis: {
+    type: String,
+    trim: true,
+    maxlength: [1000, "التشخيص يجب ألا يتجاوز 1000 حرف"],
+  },
+  prescription: {
+    type: String,
+    trim: true,
+    maxlength: [2000, "الوصفة الطبية يجب ألا تتجاوز 2000 حرف"],
+  },
+  doctorSuggestions: {
+    type: String,
+    trim: true,
+    maxlength: [2000, "التوصيات الطبية يجب ألا تتجاوز 2000 حرف"],
+  },
+  testResults: [TestResultSchema],
+  followUpDate: {
+    type: Date,
+    validate: {
+      validator: function (v) {
+        if (!v) return true;
+        return v > new Date();
+      },
+      message: "تاريخ المتابعة يجب أن يكون في المستقبل",
+    },
+  },
+  followUpNotes: {
+    type: String,
+    trim: true,
+    maxlength: [500, "ملاحظات المتابعة يجب ألا تتجاوز 500 حرف"],
+  },
   status: {
     type: String,
     default: "pending",
@@ -87,6 +146,7 @@ AppointmentSchema.index({ patientId: 1 });
 AppointmentSchema.index({ status: 1 });
 AppointmentSchema.index({ createdAt: -1 });
 AppointmentSchema.index({ patientId: 1, appointmentDate: 1 });
+AppointmentSchema.index({ followUpDate: 1 });
 
 AppointmentSchema.pre("save", function (next) {
   this.updatedAt = Date.now();
@@ -121,11 +181,33 @@ AppointmentSchema.post('save', async function(doc) {
         .findOne({ patientId: doc.patientId })
         .sort({ appointmentDate: -1, appointmentTime: -1 });
       
-      await Patient.findByIdAndUpdate(doc.patientId, {
+      const updateData = {
         appointmentCount: appointmentCount,
         lastVisit: latestAppointment ? latestAppointment.appointmentDate : null,
         updatedAt: new Date()
-      }, { new: true });
+      };
+
+      if (doc.status === 'completed') {
+        updateData.lastDoctorVisit = doc.appointmentDate;
+        
+        if (doc.doctorSuggestions) {
+          updateData.doctorSuggestions = doc.doctorSuggestions;
+        }
+        
+        if (doc.testResults && doc.testResults.length > 0) {
+          const existingPatient = await Patient.findById(doc.patientId);
+          const newTestResults = doc.testResults.map(test => ({
+            ...test.toObject(),
+            testDate: doc.appointmentDate,
+            labName: test.labName || 'غير محدد'
+          }));
+          
+          updateData.testResults = [...(existingPatient.testResults || []), ...newTestResults];
+          updateData.lastTestDate = doc.appointmentDate;
+        }
+      }
+      
+      await Patient.findByIdAndUpdate(doc.patientId, updateData, { new: true });
     }
   } catch (error) {
     console.error('Error updating patient after appointment save:', error);

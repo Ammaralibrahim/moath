@@ -10,9 +10,16 @@ export default function AppointmentModal({ appointment, patient, onClose, onSave
     appointmentDate: '',
     appointmentTime: '',
     notes: '',
+    diagnosis: '',
+    prescription: '',
+    doctorSuggestions: '',
+    testResults: [],
+    followUpDate: '',
+    followUpNotes: '',
     status: 'pending'
   })
   const [errors, setErrors] = useState({})
+  const [showTestSection, setShowTestSection] = useState(false)
 
   useEffect(() => {
     if (appointment) {
@@ -23,6 +30,13 @@ export default function AppointmentModal({ appointment, patient, onClose, onSave
           new Date(appointment.appointmentDate).toISOString().split('T')[0] : '',
         appointmentTime: appointment.appointmentTime || '',
         notes: appointment.notes || '',
+        diagnosis: appointment.diagnosis || '',
+        prescription: appointment.prescription || '',
+        doctorSuggestions: appointment.doctorSuggestions || '',
+        testResults: appointment.testResults || [],
+        followUpDate: appointment.followUpDate ? 
+          new Date(appointment.followUpDate).toISOString().split('T')[0] : '',
+        followUpNotes: appointment.followUpNotes || '',
         status: appointment.status || 'pending'
       })
     } else if (patient) {
@@ -42,6 +56,30 @@ export default function AppointmentModal({ appointment, patient, onClose, onSave
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }))
     }
+  }
+
+  const handleTestResultChange = (index, field, value) => {
+    const updatedTests = [...formData.testResults]
+    updatedTests[index] = { ...updatedTests[index], [field]: value }
+    setFormData(prev => ({ ...prev, testResults: updatedTests }))
+  }
+
+  const addTestResult = () => {
+    setFormData(prev => ({
+      ...prev,
+      testResults: [...prev.testResults, {
+        testName: '',
+        result: '',
+        normalRange: '',
+        unit: '',
+        notes: ''
+      }]
+    }))
+  }
+
+  const removeTestResult = (index) => {
+    const updatedTests = formData.testResults.filter((_, i) => i !== index)
+    setFormData(prev => ({ ...prev, testResults: updatedTests }))
   }
 
   const validateForm = () => {
@@ -73,8 +111,24 @@ export default function AppointmentModal({ appointment, patient, onClose, onSave
       newErrors.appointmentTime = 'يرجى إدخال تنسيق وقت صالح (HH:MM)'
     }
     
-    if (formData.notes.length > 500) {
+    if (formData.doctorSuggestions && formData.doctorSuggestions.length > 2000) {
+      newErrors.doctorSuggestions = 'التوصيات الطبية يجب ألا تتجاوز 2000 حرف'
+    }
+    
+    if (formData.notes && formData.notes.length > 500) {
       newErrors.notes = 'الملاحظات يجب ألا تتجاوز 500 حرف'
+    }
+    
+    if (formData.diagnosis && formData.diagnosis.length > 1000) {
+      newErrors.diagnosis = 'التشخيص يجب ألا يتجاوز 1000 حرف'
+    }
+    
+    if (formData.prescription && formData.prescription.length > 2000) {
+      newErrors.prescription = 'الوصفة الطبية يجب ألا تتجاوز 2000 حرف'
+    }
+    
+    if (formData.followUpNotes && formData.followUpNotes.length > 500) {
+      newErrors.followUpNotes = 'ملاحظات المتابعة يجب ألا تتجاوز 500 حرف'
     }
     
     return newErrors
@@ -88,6 +142,7 @@ export default function AppointmentModal({ appointment, patient, onClose, onSave
       const appointmentData = {
         ...formData,
         appointmentDate: new Date(formData.appointmentDate),
+        followUpDate: formData.followUpDate ? new Date(formData.followUpDate) : null,
         patientId: appointment?.patientId || patient?._id || null,
         _id: appointment?._id || null
       }
@@ -96,6 +151,150 @@ export default function AppointmentModal({ appointment, patient, onClose, onSave
       setErrors(validationErrors)
     }
   }
+
+  const renderTestResultsSection = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h4 className="font-semibold text-base" style={{ color: colors.text }}>
+          نتائج الفحوصات
+        </h4>
+        <button
+          type="button"
+          onClick={addTestResult}
+          className="px-3 py-1.5 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+          style={{ 
+            background: colors.gradientInfo,
+            color: '#FFFFFF'
+          }}
+        >
+          + إضافة فحص
+        </button>
+      </div>
+      
+      {formData.testResults.length === 0 ? (
+        <div className="text-center py-6 rounded-lg" style={{ 
+          backgroundColor: colors.surfaceLight,
+          border: `1px dashed ${colors.border}`
+        }}>
+          <p style={{ color: colors.textLight }}>لا توجد نتائج فحوصات</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {formData.testResults.map((test, index) => (
+            <div key={index} className="p-4 rounded-lg" style={{ 
+              backgroundColor: colors.surfaceLight,
+              border: `1px solid ${colors.border}`
+            }}>
+              <div className="flex items-center justify-between mb-3">
+                <h5 className="font-medium" style={{ color: colors.text }}>
+                  فحص #{index + 1}
+                </h5>
+                <button
+                  type="button"
+                  onClick={() => removeTestResult(index)}
+                  className="text-red-500 hover:text-red-700 text-sm"
+                >
+                  حذف
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: colors.textLight }}>
+                    اسم الفحص
+                  </label>
+                  <input
+                    type="text"
+                    value={test.testName}
+                    onChange={(e) => handleTestResultChange(index, 'testName', e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border"
+                    style={{ 
+                      borderColor: colors.border,
+                      backgroundColor: colors.background,
+                      color: colors.text
+                    }}
+                    placeholder="اسم الفحص"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: colors.textLight }}>
+                    النتيجة
+                  </label>
+                  <input
+                    type="text"
+                    value={test.result}
+                    onChange={(e) => handleTestResultChange(index, 'result', e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border"
+                    style={{ 
+                      borderColor: colors.border,
+                      backgroundColor: colors.background,
+                      color: colors.text
+                    }}
+                    placeholder="النتيجة"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: colors.textLight }}>
+                    المعدل الطبيعي
+                  </label>
+                  <input
+                    type="text"
+                    value={test.normalRange}
+                    onChange={(e) => handleTestResultChange(index, 'normalRange', e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border"
+                    style={{ 
+                      borderColor: colors.border,
+                      backgroundColor: colors.background,
+                      color: colors.text
+                    }}
+                    placeholder="المعدل الطبيعي"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: colors.textLight }}>
+                    الوحدة
+                  </label>
+                  <input
+                    type="text"
+                    value={test.unit}
+                    onChange={(e) => handleTestResultChange(index, 'unit', e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border"
+                    style={{ 
+                      borderColor: colors.border,
+                      backgroundColor: colors.background,
+                      color: colors.text
+                    }}
+                    placeholder="الوحدة"
+                  />
+                </div>
+                
+                <div className="md:col-span-2">
+                  <label className="block text-xs mb-1" style={{ color: colors.textLight }}>
+                    ملاحظات
+                  </label>
+                  <textarea
+                    value={test.notes}
+                    onChange={(e) => handleTestResultChange(index, 'notes', e.target.value)}
+                    rows="2"
+                    className="w-full px-3 py-2 rounded-lg border"
+                    style={{ 
+                      borderColor: colors.border,
+                      backgroundColor: colors.background,
+                      color: colors.text
+                    }}
+                    placeholder="ملاحظات إضافية"
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 bg-black/60 backdrop-blur-sm overflow-y-auto">
@@ -141,10 +340,10 @@ export default function AppointmentModal({ appointment, patient, onClose, onSave
           
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
             <div className="p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-6">
                 {/* Patient Info (Auto-filled if from PatientViewModal) */}
-                <div className="lg:col-span-2">
-                  <div className="p-4 rounded-xl mb-6" style={{ 
+                <div>
+                  <div className="p-4 rounded-xl mb-4" style={{ 
                     backgroundColor: colors.surfaceLight,
                     border: `1px solid ${colors.border}`
                   }}>
@@ -168,56 +367,59 @@ export default function AppointmentModal({ appointment, patient, onClose, onSave
                 </div>
 
                 {/* Date and Time */}
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
-                    <span className="text-red-500">*</span> التاريخ
-                  </label>
-                  <input
-                    type="date"
-                    name="appointmentDate"
-                    value={formData.appointmentDate}
-                    onChange={handleChange}
-                    min={new Date().toISOString().split('T')[0]}
-                    className={`w-full px-4 py-3 rounded-xl border-2 focus:outline-none focus:ring-2 transition-all ${errors.appointmentDate ? 'border-red-500 focus:ring-red-500/20' : 'border-gray-300 focus:ring-blue-500/20'}`}
-                    style={{ 
-                      backgroundColor: colors.background,
-                      color: colors.text
-                    }}
-                  />
-                  {errors.appointmentDate && (
-                    <p className="text-red-500 text-xs mt-2">{errors.appointmentDate}</p>
-                  )}
-                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
+                      <span className="text-red-500">*</span> التاريخ
+                    </label>
+                    <input
+                      type="date"
+                      name="appointmentDate"
+                      value={formData.appointmentDate}
+                      onChange={handleChange}
+                      min={new Date().toISOString().split('T')[0]}
+                      className={`w-full px-4 py-3 rounded-xl border-2 focus:outline-none focus:ring-2 transition-all ${errors.appointmentDate ? 'border-red-500 focus:ring-red-500/20' : 'border-gray-300 focus:ring-blue-500/20'}`}
+                      style={{ 
+                        backgroundColor: colors.background,
+                        color: colors.text
+                      }}
+                    />
+                    {errors.appointmentDate && (
+                      <p className="text-red-500 text-xs mt-2">{errors.appointmentDate}</p>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
-                    <span className="text-red-500">*</span> الوقت
-                  </label>
-                  <input
-                    type="time"
-                    name="appointmentTime"
-                    value={formData.appointmentTime}
-                    onChange={handleChange}
-                    className={`w-full px-4 py-3 rounded-xl border-2 focus:outline-none focus:ring-2 transition-all ${errors.appointmentTime ? 'border-red-500 focus:ring-red-500/20' : 'border-gray-300 focus:ring-blue-500/20'}`}
-                    style={{ 
-                      backgroundColor: colors.background,
-                      color: colors.text
-                    }}
-                  />
-                  {errors.appointmentTime && (
-                    <p className="text-red-500 text-xs mt-2">{errors.appointmentTime}</p>
-                  )}
+                  <div>
+                    <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
+                      <span className="text-red-500">*</span> الوقت
+                    </label>
+                    <input
+                      type="time"
+                      name="appointmentTime"
+                      value={formData.appointmentTime}
+                      onChange={handleChange}
+                      className={`w-full px-4 py-3 rounded-xl border-2 focus:outline-none focus:ring-2 transition-all ${errors.appointmentTime ? 'border-red-500 focus:ring-red-500/20' : 'border-gray-300 focus:ring-blue-500/20'}`}
+                      style={{ 
+                        backgroundColor: colors.background,
+                        color: colors.text
+                      }}
+                    />
+                    {errors.appointmentTime && (
+                      <p className="text-red-500 text-xs mt-2">{errors.appointmentTime}</p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Status */}
-                <div className="lg:col-span-2">
+                <div>
                   <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
                     الحالة
                   </label>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
                       { value: 'pending', label: 'قيد الانتظار', color: colors.warning },
                       { value: 'confirmed', label: 'مؤكد', color: colors.success },
+                      { value: 'completed', label: 'مكتمل', color: colors.info },
                       { value: 'cancelled', label: 'ملغي', color: colors.error },
                     ].map((option) => (
                       <label key={option.value} className="flex flex-col items-center p-4 rounded-xl cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98]" style={{ 
@@ -241,8 +443,134 @@ export default function AppointmentModal({ appointment, patient, onClose, onSave
                   </div>
                 </div>
 
+                {/* Medical Information */}
+                {formData.status === 'completed' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
+                        التشخيص
+                      </label>
+                      <textarea
+                        name="diagnosis"
+                        value={formData.diagnosis}
+                        onChange={handleChange}
+                        rows="3"
+                        className={`w-full px-4 py-3 rounded-xl border-2 focus:outline-none focus:ring-2 transition-all resize-none ${errors.diagnosis ? 'border-red-500 focus:ring-red-500/20' : 'border-gray-300 focus:ring-blue-500/20'}`}
+                        style={{ 
+                          backgroundColor: colors.background,
+                          color: colors.text
+                        }}
+                        placeholder="تشخيص الطبيب"
+                      />
+                      {errors.diagnosis && (
+                        <p className="text-red-500 text-xs mt-2">{errors.diagnosis}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
+                        الوصفة الطبية
+                      </label>
+                      <textarea
+                        name="prescription"
+                        value={formData.prescription}
+                        onChange={handleChange}
+                        rows="4"
+                        className={`w-full px-4 py-3 rounded-xl border-2 focus:outline-none focus:ring-2 transition-all resize-none ${errors.prescription ? 'border-red-500 focus:ring-red-500/20' : 'border-gray-300 focus:ring-blue-500/20'}`}
+                        style={{ 
+                          backgroundColor: colors.background,
+                          color: colors.text
+                        }}
+                        placeholder="الوصفة الطبية"
+                      />
+                      {errors.prescription && (
+                        <p className="text-red-500 text-xs mt-2">{errors.prescription}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
+                        توصيات الطبيب
+                      </label>
+                      <textarea
+                        name="doctorSuggestions"
+                        value={formData.doctorSuggestions}
+                        onChange={handleChange}
+                        rows="4"
+                        className={`w-full px-4 py-3 rounded-xl border-2 focus:outline-none focus:ring-2 transition-all resize-none ${errors.doctorSuggestions ? 'border-red-500 focus:ring-red-500/20' : 'border-gray-300 focus:ring-blue-500/20'}`}
+                        style={{ 
+                          backgroundColor: colors.background,
+                          color: colors.text
+                        }}
+                        placeholder="توصيات الطبيب للمريض"
+                      />
+                      {errors.doctorSuggestions && (
+                        <p className="text-red-500 text-xs mt-2">{errors.doctorSuggestions}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-semibold" style={{ color: colors.text }}>
+                          نتائج الفحوصات
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setShowTestSection(!showTestSection)}
+                          className="text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          {showTestSection ? 'إخفاء' : 'إظهار'}
+                        </button>
+                      </div>
+                      {showTestSection && renderTestResultsSection()}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
+                          تاريخ المتابعة
+                        </label>
+                        <input
+                          type="date"
+                          name="followUpDate"
+                          value={formData.followUpDate}
+                          onChange={handleChange}
+                          min={new Date().toISOString().split('T')[0]}
+                          className="w-full px-4 py-3 rounded-xl border-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                          style={{ 
+                            borderColor: colors.border,
+                            backgroundColor: colors.background,
+                            color: colors.text
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
+                          ملاحظات المتابعة
+                        </label>
+                        <input
+                          type="text"
+                          name="followUpNotes"
+                          value={formData.followUpNotes}
+                          onChange={handleChange}
+                          className={`w-full px-4 py-3 rounded-xl border-2 focus:outline-none focus:ring-2 transition-all ${errors.followUpNotes ? 'border-red-500 focus:ring-red-500/20' : 'border-gray-300 focus:ring-blue-500/20'}`}
+                          style={{ 
+                            backgroundColor: colors.background,
+                            color: colors.text
+                          }}
+                          placeholder="ملاحظات المتابعة"
+                        />
+                        {errors.followUpNotes && (
+                          <p className="text-red-500 text-xs mt-2">{errors.followUpNotes}</p>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
                 {/* Notes */}
-                <div className="lg:col-span-2">
+                <div>
                   <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
                     ملاحظات
                   </label>

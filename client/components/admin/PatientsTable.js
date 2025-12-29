@@ -8,6 +8,30 @@ import toast from 'react-hot-toast'
 export default function PatientsTable({ patients, pagination, onPageChange, onView, onEdit, onDelete }) {
   const [selectedRows, setSelectedRows] = useState([])
 
+  // Format emergency contact display
+  const formatEmergencyContact = (emergencyContact) => {
+    if (!emergencyContact) return null
+    
+    // If it's a string, return as is
+    if (typeof emergencyContact === 'string') {
+      return emergencyContact
+    }
+    
+    // If it's an object, format it
+    if (typeof emergencyContact === 'object') {
+      // Handle different possible formats
+      if (emergencyContact.phoneNumber) {
+        return `${emergencyContact.name || ''} - ${formatPhoneNumber(emergencyContact.phoneNumber)}`.trim()
+      }
+      if (emergencyContact.name) {
+        return emergencyContact.name
+      }
+      return JSON.stringify(emergencyContact) // Fallback
+    }
+    
+    return null
+  }
+
   if (!patients || patients.length === 0) {
     return (
       <div className="rounded-2xl border overflow-hidden shadow-xl" style={{ borderColor: colors.border }}>
@@ -137,7 +161,7 @@ export default function PatientsTable({ patients, pagination, onPageChange, onVi
         </div>
         
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px]">
+          <table className="w-full min-w-[1000px]">
             <thead style={{ backgroundColor: colors.surfaceLight }}>
               <tr>
                 <th className="px-4 py-3 text-right text-sm font-semibold" style={{ color: colors.textLight, width: '40px' }}>
@@ -147,167 +171,190 @@ export default function PatientsTable({ patients, pagination, onPageChange, onVi
                 <th className="px-4 py-3 text-right text-sm font-semibold" style={{ color: colors.textLight }}>الهاتف</th>
                 <th className="px-4 py-3 text-right text-sm font-semibold" style={{ color: colors.textLight }}>العمر</th>
                 <th className="px-4 py-3 text-right text-sm font-semibold" style={{ color: colors.textLight }}>الجنس</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold" style={{ color: colors.textLight }}>المواعيد</th>
+                <th className="px-4 py-3 text-right text-sm font-semibold" style={{ color: colors.textLight }}>الفحوصات</th>
                 <th className="px-4 py-3 text-right text-sm font-semibold" style={{ color: colors.textLight }}>آخر زيارة</th>
                 <th className="px-4 py-3 text-right text-sm font-semibold" style={{ color: colors.textLight, width: '150px' }}>الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y" style={{ borderColor: colors.border }}>
-              {patients.map((patient, index) => (
-                <tr 
-                  key={patient._id}
-                  className={`hover:opacity-90 transition-opacity ${selectedRows.includes(patient._id) ? 'bg-blue-50' : ''}`}
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedRows.includes(patient._id)}
-                        onChange={() => handleSelectRow(patient._id)}
-                        className="w-4 h-4 rounded border"
-                        style={{ borderColor: colors.border }}
-                      />
-                      <span className="text-sm font-mono" style={{ color: colors.textLight }}>
-                        {((pagination.page - 1) * pagination.limit) + index + 1}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div 
-                      className="text-sm font-semibold cursor-pointer hover:underline" 
-                      style={{ color: colors.primary }}
-                      onClick={() => onView(patient)}
-                    >
-                      {patient.patientName}
-                    </div>
-                    {patient.email && (
-                      <div className="text-xs truncate max-w-[200px]" style={{ color: colors.textLight }}>
-                        {patient.email}
+              {patients.map((patient, index) => {
+                const emergencyContactFormatted = formatEmergencyContact(patient.emergencyContact)
+                return (
+                  <tr 
+                    key={patient._id}
+                    className={`hover:opacity-90 transition-opacity ${selectedRows.includes(patient._id) ? 'bg-blue-50' : ''}`}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedRows.includes(patient._id)}
+                          onChange={() => handleSelectRow(patient._id)}
+                          className="w-4 h-4 rounded border"
+                          style={{ borderColor: colors.border }}
+                        />
+                        <span className="text-sm font-mono" style={{ color: colors.textLight }}>
+                          {((pagination.page - 1) * pagination.limit) + index + 1}
+                        </span>
                       </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col">
-                      <div className="text-sm font-mono font-medium" style={{ color: colors.text }}>
-                        {formatPhoneNumber(patient.phoneNumber)}
-                      </div>
-                      {patient.emergencyContact && (
-                        <div className="text-xs" style={{ color: colors.textLight }}>
-                          طوارئ: {patient.emergencyContact}
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col">
-                      <div className="text-sm font-medium" style={{ color: colors.text }}>
-                        {patient.birthDate ? `${calculateAge(patient.birthDate)} سنة` : 'غير محدد'}
-                      </div>
-                      {patient.birthDate && (
-                        <div className="text-xs" style={{ color: colors.textLight }}>
-                          {new Date(patient.birthDate).toLocaleDateString('ar-SA')}
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
-                      patient.gender === 'male' 
-                        ? 'bg-blue-100 text-blue-800' 
-                        : 'bg-pink-100 text-pink-800'
-                    }`}>
-                      {patient.gender === 'male' ? (
-                        <>
-                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-7.536 5.879a1 1 0 001.415 0 3 3 0 014.242 0 1 1 0 001.415-1.415 5 5 0 00-7.072 0 1 1 0 000 1.415z" clipRule="evenodd" />
-                          </svg>
-                          ذكر
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 100-2 1 1 0 000 2zm0 4a1 1 0 100-2 1 1 0 000 2zm4 0a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-                          </svg>
-                          أنثى
-                        </>
-                      )}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                        (patient.appointmentCount || 0) > 0 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        <span className="text-sm font-bold">{patient.appointmentCount || 0}</span>
-                      </div>
-                      <div className="text-xs" style={{ color: colors.textLight }}>
-                        {patient.appointmentCount ? 'موعد' : 'لا يوجد'}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="text-sm" style={{ 
-                      color: patient.lastVisit ? colors.text : colors.textLight 
-                    }}>
-                      {patient.lastVisit 
-                        ? formatDate(patient.lastVisit, true)
-                        : 'لا توجد'
-                      }
-                    </div>
-                    {patient.lastVisit && (
-                      <div className="text-xs" style={{ color: colors.textLight }}>
-                        منذ {calculateDaysAgo(patient.lastVisit)} يوم
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <button
+                    </td>
+                    <td className="px-4 py-3">
+                      <div 
+                        className="text-sm font-semibold cursor-pointer hover:underline" 
+                        style={{ color: colors.primary }}
                         onClick={() => onView(patient)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity flex items-center gap-1"
-                        style={{ 
-                          background: colors.gradientPrimary,
-                          color: '#FFFFFF'
-                        }}
                       >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                        عرض
-                      </button>
-                      <button
-                        onClick={() => onEdit(patient)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity flex items-center gap-1"
-                        style={{ 
-                          background: colors.gradientInfo,
-                          color: '#FFFFFF'
-                        }}
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                        تعديل
-                      </button>
-                      <button
-                        onClick={() => onDelete(patient._id)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity flex items-center gap-1"
-                        style={{ 
-                          background: colors.gradientError,
-                          color: '#FFFFFF'
-                        }}
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        حذف
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        {patient.patientName}
+                      </div>
+                      {patient.email && (
+                        <div className="text-xs truncate max-w-[200px]" style={{ color: colors.textLight }}>
+                          {patient.email}
+                        </div>
+                      )}
+                      {patient.bloodType && patient.bloodType !== 'غير معروف' && (
+                        <div className="text-xs mt-1 px-2 py-0.5 rounded-full inline-block" style={{ 
+                          backgroundColor: colors.primary + '10',
+                          color: colors.primary
+                        }}>
+                          فصيلة الدم: {patient.bloodType}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col">
+                        <div className="text-sm font-mono font-medium" style={{ color: colors.text }}>
+                          {formatPhoneNumber(patient.phoneNumber)}
+                        </div>
+                        {emergencyContactFormatted && (
+                          <div className="text-xs truncate max-w-[150px]" style={{ color: colors.textLight }}>
+                            طوارئ: {emergencyContactFormatted}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col">
+                        <div className="text-sm font-medium" style={{ color: colors.text }}>
+                          {patient.birthDate ? `${calculateAge(patient.birthDate)} سنة` : 'غير محدد'}
+                        </div>
+                        {patient.birthDate && (
+                          <div className="text-xs" style={{ color: colors.textLight }}>
+                            {new Date(patient.birthDate).toLocaleDateString('ar-SA')}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
+                        patient.gender === 'male' 
+                          ? 'bg-blue-100 text-blue-800' 
+                          : 'bg-pink-100 text-pink-800'
+                      }`}>
+                        {patient.gender === 'male' ? (
+                          <>
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-7.536 5.879a1 1 0 001.415 0 3 3 0 014.242 0 1 1 0 001.415-1.415 5 5 0 00-7.072 0 1 1 0 000 1.415z" clipRule="evenodd" />
+                            </svg>
+                            ذكر
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 100-2 1 1 0 000 2zm0 4a1 1 0 100-2 1 1 0 000 2zm4 0a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                            </svg>
+                            أنثى
+                          </>
+                        )}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                            (patient.testResults?.length || 0) > 0 
+                              ? 'bg-blue-100 text-blue-800' 
+                              : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            <span className="text-sm font-bold">{patient.testResults?.length || 0}</span>
+                          </div>
+                          <div className="text-xs" style={{ color: colors.textLight }}>
+                            {patient.testResults?.length ? 'فحص' : 'لا يوجد'}
+                          </div>
+                        </div>
+                        {patient.latestTestResult && (
+                          <div className="text-xs truncate max-w-[150px]" style={{ color: colors.textLight }}>
+                            {patient.latestTestResult.testName || 'آخر فحص'}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col">
+                        <div className="text-sm" style={{ 
+                          color: patient.lastVisit ? colors.text : colors.textLight 
+                        }}>
+                          {patient.lastVisit 
+                            ? formatDate(patient.lastVisit, true)
+                            : 'لا توجد'
+                          }
+                        </div>
+                        {patient.lastDoctorVisit && (
+                          <div className="text-xs mt-1 px-2 py-0.5 rounded-full inline-block" style={{ 
+                            backgroundColor: colors.success + '10',
+                            color: colors.success
+                          }}>
+                            طبيب: {formatDate(patient.lastDoctorVisit, true)}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => onView(patient)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity flex items-center gap-1"
+                          style={{ 
+                            background: colors.gradientPrimary,
+                            color: '#FFFFFF'
+                          }}
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                          عرض
+                        </button>
+                        <button
+                          onClick={() => onEdit(patient)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity flex items-center gap-1"
+                          style={{ 
+                            background: colors.gradientInfo,
+                            color: '#FFFFFF'
+                          }}
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          تعديل
+                        </button>
+                        <button
+                          onClick={() => onDelete(patient._id)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium hover:opacity-80 transition-opacity flex items-center gap-1"
+                          style={{ 
+                            background: colors.gradientError,
+                            color: '#FFFFFF'
+                          }}
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          حذف
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
