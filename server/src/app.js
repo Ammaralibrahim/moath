@@ -23,11 +23,32 @@ app.use(cors({
   origin: ['https://alsawaf.vercel.app'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key', 'X-Requested-With', 'Accept']
 }));
 
 // OPTIONS isteklerini handle et
 app.options('*', cors());
+
+// Safety-net CORS middleware: ensure Access-Control headers are present
+app.use((req, res, next) => {
+  const allowedOrigins = ['https://alsawaf.vercel.app', 'http://localhost:3000'];
+  const origin = req.headers.origin;
+
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-key, X-Requested-With, Accept');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
 
 // Body parser middleware
 app.use(express.json({ limit: "50mb" }));
