@@ -15,47 +15,27 @@ const reportRoutes = require("./routes/reports");
 
 const app = express();
 
-/**
- * =========================
- * CORS (TEK KAYNAK – SADE)
- * =========================
- */
-const allowedOrigins = [
-  "https://alsawaf.vercel.app",
-  "http://localhost:3000",
-];
-
+/* =====================
+   CORS (NET & STABİL)
+===================== */
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Postman, curl, server-to-server
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      return callback(new Error("CORS BLOCKED"));
-    },
+    origin: "https://alsawaf.vercel.app",
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization", "x-admin-key"],
   })
 );
 
-/**
- * =========================
- * BODY PARSER
- * =========================
- */
+/* =====================
+   BODY PARSER
+===================== */
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-/**
- * =========================
- * ROUTES
- * =========================
- */
+/* =====================
+   ROUTES
+===================== */
 
 // PUBLIC
 app.use("/api/health", systemRoutes);
@@ -69,23 +49,9 @@ app.use("/api/system", authMiddleware, systemRoutes);
 app.use("/api/backup", authMiddleware, backupRoutes);
 app.use("/api/reports", authMiddleware, reportRoutes);
 
-/**
- * =========================
- * ERROR HANDLING
- * =========================
- */
+/* =====================
+   ERROR HANDLER
+===================== */
 app.use(errorHandler);
-
-/**
- * =========================
- * 404
- * =========================
- */
-app.use("*", (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: "Endpoint غير موجود",
-  });
-});
 
 module.exports = app;
