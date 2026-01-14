@@ -1,6 +1,5 @@
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
 require("dotenv").config();
 
 const authMiddleware = require("./middleware/auth");
@@ -10,11 +9,9 @@ const errorHandler = require("./middleware/errorHandler");
 const patientRoutes = require("./routes/patients");
 const appointmentRoutes = require("./routes/appointments");
 const systemRoutes = require("./routes/system");
-const availabilityRoutes = require("./routes/availability"); // EKSİK OLAN ROUTE
+const availabilityRoutes = require("./routes/availability");
 const backupRoutes = require("./routes/backup");
 const reportRoutes = require("./routes/reports");
-
-
 
 const app = express();
 
@@ -22,7 +19,7 @@ const app = express();
 const allowed = ['https://alsawaf.vercel.app', 'http://localhost:3000'];
 app.use(cors({
   origin: function(origin, cb) {
-    if (!origin) return cb(null, true); // server-to-server veya postman
+    if (!origin) return cb(null, true);
     if (allowed.indexOf(origin) !== -1) return cb(null, true);
     return cb(new Error('CORS not allowed'), false);
   },
@@ -44,12 +41,9 @@ app.use("/api/appointments", appointmentRoutes);
 app.use("/api/admin/appointments", authMiddleware, appointmentRoutes);
 app.use("/api/backup", authMiddleware, backupRoutes);
 app.use("/api/reports", authMiddleware, reportRoutes);
-
 app.use("/api/system", authMiddleware, systemRoutes);
 app.use("/api/health", systemRoutes);
-app.use("/api/availability", availabilityRoutes); // EKSİK OLAN ROUTE'U EKLE
-
-
+app.use("/api/availability", availabilityRoutes); 
 
 // Hata yönetimi middleware'i
 app.use(errorHandler);
