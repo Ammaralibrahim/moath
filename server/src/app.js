@@ -14,20 +14,33 @@ const availabilityRoutes = require("./routes/availability"); // EKSİK OLAN ROUT
 const backupRoutes = require("./routes/backup");
 const reportRoutes = require("./routes/reports");
 
+const allowedOrigins = ['https://alsawaf.vercel.app', 'http://localhost:3000'];
 
 
 const app = express();
 
 // CORS yapılandırması
-app.use(cors({
-  origin: ['https://alsawaf.vercel.app', 'http://localhost:3000'],
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key', 'X-Requested-With']
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key', 'X-Requested-With'],
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
 
 // OPTIONS isteklerini handle et
-app.options('*', cors());
+app.options('*', cors(corsOptions));
 
 // Body parser middleware
 app.use(express.json({ limit: "50mb" }));
