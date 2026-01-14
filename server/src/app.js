@@ -19,36 +19,20 @@ const reportRoutes = require("./routes/reports");
 const app = express();
 
 // CORS yapılandırması
+const allowed = ['https://alsawaf.vercel.app', 'http://localhost:3000'];
 app.use(cors({
-  origin: ['https://alsawaf.vercel.app'],
+  origin: function(origin, cb) {
+    if (!origin) return cb(null, true); // server-to-server veya postman
+    if (allowed.indexOf(origin) !== -1) return cb(null, true);
+    return cb(new Error('CORS not allowed'), false);
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key', 'X-Requested-With', 'Accept']
+  methods: ['GET','POST','PUT','DELETE','OPTIONS','PATCH'],
+  allowedHeaders: ['Content-Type','Authorization','x-requested-with','x-admin-key']
 }));
 
 // OPTIONS isteklerini handle et
 app.options('*', cors());
-
-// Safety-net CORS middleware: ensure Access-Control headers are present
-app.use((req, res, next) => {
-  const allowedOrigins = ['https://alsawaf.vercel.app', 'http://localhost:3000'];
-  const origin = req.headers.origin;
-
-  if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-
-  res.setHeader('Vary', 'Origin');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-key, X-Requested-With, Accept');
-
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(204);
-  }
-
-  next();
-});
 
 // Body parser middleware
 app.use(express.json({ limit: "50mb" }));

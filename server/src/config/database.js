@@ -1,43 +1,24 @@
-const mongoose = require("mongoose");
+// src/utils/dbConnect.js
+const mongoose = require('mongoose');
+const MONGODB_URI = process.env.MONGODB_URI;
 
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/poliklinik";
+let cached = global._mongo;
 
-let cached = global.__mongooseCached || null;
+if (!cached) {
+  cached = global._mongo = { conn: null, promise: null };
+}
 
-async function connect() {
-  if (cached && cached.isConnected) {
-    return cached.conn;
+async function dbConnect() {
+  if (cached.conn) return cached.conn;
+  if (!cached.promise) {
+    const opts = {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    };
+    cached.promise = mongoose.connect(MONGODB_URI, opts).then(m => m);
   }
-
-  if (!MONGODB_URI) {
-    throw new Error('MONGODB_URI is not set in environment');
-  }
-
-  const opts = {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    maxPoolSize: 50,
-    serverSelectionTimeoutMS: 30000,
-    socketTimeoutMS: 60000,
-    connectTimeoutMS: 30000,
-    retryWrites: true,
-    retryReads: true,
-    w: 'majority'
-  };
-
-  const conn = await mongoose.connect(MONGODB_URI, opts);
-
-  cached = {
-    conn: mongoose,
-    isConnected: mongoose.connection.readyState === 1
-  };
-
-  global.__mongooseCached = cached;
-
+  cached.conn = await cached.promise;
   return cached.conn;
 }
 
-module.exports = {
-  connect,
-  mongoose
-};
+module.exports = dbConnect;
