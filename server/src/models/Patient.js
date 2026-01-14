@@ -67,20 +67,20 @@ const ReferralSourceSchema = new mongoose.Schema({
 });
 
 const PatientSchema = new mongoose.Schema({
-  // البيانات الديموغرافية
   patientName: {
     type: String,
     required: [true, "اسم المريض مطلوب"],
     trim: true,
     minlength: [2, "اسم المريض يجب أن يكون على الأقل حرفين"],
     maxlength: [100, "اسم المريض يجب ألا يتجاوز 100 حرف"],
-    index: true,
   },
   birthDate: {
     type: Date,
-    required: [true, "تاريخ الميلاد مطلوب"],
     validate: {
       validator: function (v) {
+        if (v === null || v === undefined || v === '') {
+          return true;
+        }
         return v <= new Date();
       },
       message: "تاريخ الميلاد لا يمكن أن يكون في المستقبل",
@@ -97,7 +97,6 @@ const PatientSchema = new mongoose.Schema({
   },
   address: {
     type: String,
-    required: [true, "العنوان مطلوب"],
     trim: true,
     maxlength: [500, "العنوان يجب ألا يتجاوز 500 حرف"],
   },
@@ -112,7 +111,6 @@ const PatientSchema = new mongoose.Schema({
       },
       message: "الرجاء إدخال رقم هاتف صحيح",
     },
-    index: true,
   },
   email: {
     type: String,
@@ -153,13 +151,11 @@ const PatientSchema = new mongoose.Schema({
     },
   },
   
-  // معلومات التسجيل
   patientId: {
     type: String,
     unique: true,
     trim: true,
     maxlength: [50, "رقم الملف يجب ألا يتجاوز 50 حرف"],
-    index: true,
   },
   registrationDate: {
     type: Date,
@@ -170,7 +166,6 @@ const PatientSchema = new mongoose.Schema({
     type: Date,
   },
   
-  // البيانات الطبية الأساسية
   medicalSummary: {
     type: String,
     trim: true,
@@ -202,10 +197,8 @@ const PatientSchema = new mongoose.Schema({
     max: [100, "مؤشر كتلة الجسم لا يمكن أن يتجاوز 100"],
   },
   
-  // بيانات التأمين
   insurance: InsuranceSchema,
   
-  // معلومات إضافية لـ RIS
   doctorSuggestions: {
     type: String,
     trim: true,
@@ -263,7 +256,7 @@ const PatientSchema = new mongoose.Schema({
   },
   bloodType: {
     type: String,
-    enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'غير معروف'],
+    enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'غير معروف', ''],
     default: 'غير معروف',
   },
   chronicDiseases: [{
@@ -277,11 +270,11 @@ const PatientSchema = new mongoose.Schema({
     },
     severity: {
       type: String,
-      enum: ['خفيف', 'متوسط', 'شديد'],
+      enum: ['خفيف', 'متوسط', 'شديد', ''],
     },
     currentStatus: {
       type: String,
-      enum: ['نشط', 'متحكم به', 'مستقر', 'في تحسن'],
+      enum: ['نشط', 'متحكم به', 'مستقر', 'في تحسن', ''],
     },
     notes: {
       type: String,
@@ -290,7 +283,6 @@ const PatientSchema = new mongoose.Schema({
     },
   }],
   
-  // حالة المريض
   isActive: {
     type: Boolean,
     default: true,
@@ -309,7 +301,6 @@ const PatientSchema = new mongoose.Schema({
     type: String,
     unique: true,
     sparse: true,
-    index: true
   },
   backupData: {
     type: Map,
@@ -326,11 +317,12 @@ const PatientSchema = new mongoose.Schema({
   },
 });
 
-PatientSchema.index({
+// إزالة الفهرس المكرر وإعادة تعريفه مرة واحدة
+PatientSchema.index({ 
   patientName: "text",
   phoneNumber: "text",
   email: "text",
-  patientId: "text",
+  patientId: "text"
 });
 PatientSchema.index({ gender: 1 });
 PatientSchema.index({ birthDate: 1 });
@@ -338,7 +330,6 @@ PatientSchema.index({ lastVisitDate: -1 });
 PatientSchema.index({ registrationDate: -1 });
 PatientSchema.index({ appointmentCount: -1 });
 PatientSchema.index({ isActive: 1 });
-PatientSchema.index({ createdAt: -1 });
 PatientSchema.index({ bloodType: 1 });
 PatientSchema.index({ 'chronicDiseases.diseaseName': 1 });
 PatientSchema.index({ 'insurance.companyName': 1 });
@@ -347,21 +338,18 @@ PatientSchema.index({ 'referralSources.doctorName': 1 });
 PatientSchema.pre("save", function (next) {
   this.updatedAt = Date.now();
   
-  // توليد رقم ملف فريد إذا لم يكن موجوداً
   if (!this.patientId) {
     const year = new Date().getFullYear();
     const randomNum = Math.floor(10000 + Math.random() * 90000);
     this.patientId = `PAT-${year}-${randomNum}`;
   }
   
-  // حساب BMI إذا كان الوزن والطول موجودين
   if (this.weight && this.height && this.height > 0) {
     const heightInMeters = this.height / 100;
     this.bmi = parseFloat((this.weight / (heightInMeters * heightInMeters)).toFixed(2));
   }
   
-  // التحقق من البريد الإلكتروني
-  if (this.email && !/^\S+@\S+\.\S+$/.test(this.email)) {
+  if (this.email && this.email !== '' && !/^\S+@\S+\.\S+$/.test(this.email)) {
     const error = new mongoose.Error.ValidationError(this);
     error.errors.email = new mongoose.Error.ValidatorError({
       message: "البريد الإلكتروني غير صالح",
@@ -371,7 +359,6 @@ PatientSchema.pre("save", function (next) {
     return next(error);
   }
   
-  // تحديث تاريخ آخر فحص
   if (this.testResults && this.testResults.length > 0) {
     const latestTest = this.testResults.reduce((latest, test) => {
       return new Date(test.testDate) > new Date(latest.testDate) ? test : latest;

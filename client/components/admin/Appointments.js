@@ -1,16 +1,16 @@
+// @/components/appointments/Appointments.jsx
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import AppointmentsTable from './AppointmentsTable'
 import CalendarView from './CalendarView'
 import Filters from './Filters'
 import AppointmentModal from './modals/AppointmentModal'
-import { colors } from '@/components/shared/constants'
-import { apiRequest, createAppointment, updateAppointment, deleteAppointment } from '@/components/shared/api'
+import { apiRequest } from '@/components/shared/api'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import toast from 'react-hot-toast'
 
-export default function Appointments() {
+const Appointments = () => {
   const [appointments, setAppointments] = useState([])
   const [loading, setLoading] = useState(false)
   const [viewMode, setViewMode] = useState('table')
@@ -24,11 +24,7 @@ export default function Appointments() {
   const [selectedAppointment, setSelectedAppointment] = useState(null)
   const [showAppointmentModal, setShowAppointmentModal] = useState(false)
 
-  useEffect(() => {
-    fetchAppointments()
-  }, [])
-
-  const fetchAppointments = async () => {
+  const fetchAppointments = useCallback(async () => {
     try {
       setLoading(true)
       const queryParams = new URLSearchParams()
@@ -48,13 +44,17 @@ export default function Appointments() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filters.date, filters.status, filters.patientName, filters.phoneNumber])
 
-  const handleFilterChange = (newFilters) => {
+  useEffect(() => {
+    fetchAppointments()
+  }, [fetchAppointments])
+
+  const handleFilterChange = useCallback((newFilters) => {
     setFilters(newFilters)
-  }
+  }, [])
 
-  const filteredAppointments = () => {
+  const filteredAppointments = useMemo(() => {
     let filtered = [...appointments]
     
     if (!filters.showPast) {
@@ -67,18 +67,22 @@ export default function Appointments() {
     }
     
     return filtered
-  }
+  }, [appointments, filters.showPast])
 
-  const handleSaveAppointment = async (appointmentData) => {
+  const handleSaveAppointment = useCallback(async (appointmentData) => {
     try {
       setLoading(true)
       
-      let data
-      if (appointmentData._id) {
-        data = await updateAppointment(appointmentData._id, appointmentData)
-      } else {
-        data = await createAppointment(appointmentData)
-      }
+      const endpoint = appointmentData._id 
+        ? `/api/appointments/${appointmentData._id}`
+        : '/api/appointments'
+      
+      const method = appointmentData._id ? 'PUT' : 'POST'
+      
+      const data = await apiRequest(endpoint, {
+        method,
+        body: JSON.stringify(appointmentData)
+      })
       
       if (data.success) {
         fetchAppointments()
@@ -92,13 +96,15 @@ export default function Appointments() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [fetchAppointments])
 
-  const handleDeleteAppointment = async (appointmentId) => {
+  const handleDeleteAppointment = useCallback(async (appointmentId) => {
     if (window.confirm('هل أنت متأكد من حذف هذا الموعد؟')) {
       try {
         setLoading(true)
-        const data = await deleteAppointment(appointmentId)
+        const data = await apiRequest(`/api/appointments/${appointmentId}`, {
+          method: 'DELETE'
+        })
         
         if (data.success) {
           fetchAppointments()
@@ -111,95 +117,90 @@ export default function Appointments() {
         setLoading(false)
       }
     }
-  }
+  }, [fetchAppointments])
 
-  const handleAddNewAppointment = () => {
+  const handleAddNewAppointment = useCallback(() => {
     setSelectedAppointment(null)
     setShowAppointmentModal(true)
-  }
+  }, [])
+
+  const handleEditAppointment = useCallback((appointment) => {
+    setSelectedAppointment(appointment)
+    setShowAppointmentModal(true)
+  }, [])
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold" style={{ color: colors.text }}>إدارة المواعيد</h1>
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-100">إدارة المواعيد</h1>
+          <p className="text-sm text-gray-400 mt-1">
+            عرض وإدارة جميع مواعيد المرضى
+          </p>
+        </div>
         <button
           onClick={handleAddNewAppointment}
-          className="px-4 py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity shadow-lg"
-          style={{ 
-            background: colors.gradientPrimary,
-            color: '#FFFFFF'
-          }}
+          className="px-4 py-2.5 bg-gradient-to-l from-blue-600 to-blue-500 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center gap-2"
         >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
           إضافة موعد جديد
         </button>
       </div>
       
+      {/* Filters */}
       <Filters 
         filters={filters}
         onFilterChange={handleFilterChange}
         onApplyFilters={fetchAppointments}
       />
       
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-medium" style={{ color: colors.textLight }}>
-          إجمالي النتائج: <span className="font-bold" style={{ color: colors.text }}>{filteredAppointments().length}</span>
+      {/* View Controls */}
+      <div className="flex items-center justify-between bg-gray-900/50 backdrop-blur-sm p-4 rounded-xl border border-gray-800">
+        <div className="text-sm text-gray-300">
+          إجمالي النتائج: <span className="font-bold text-gray-100">{filteredAppointments.length}</span>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => setViewMode('table')}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+            className={`px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
               viewMode === 'table' 
-                ? 'shadow-lg' 
-                : 'hover:opacity-90'
+                ? 'bg-gradient-to-l from-blue-600 to-blue-500 text-white shadow-lg' 
+                : 'bg-gray-800/50 text-gray-300 hover:bg-gray-800'
             }`}
-            style={viewMode === 'table' ? {
-              background: colors.gradientPrimary,
-              color: '#FFFFFF'
-            } : {
-              border: `1px solid ${colors.borderLight}`,
-              color: colors.textLight,
-              backgroundColor: colors.surfaceLight
-            }}
           >
-            جدول
+            عرض الجدول
           </button>
           <button
             onClick={() => setViewMode('calendar')}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+            className={`px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
               viewMode === 'calendar' 
-                ? 'shadow-lg' 
-                : 'hover:opacity-90'
+                ? 'bg-gradient-to-l from-blue-600 to-blue-500 text-white shadow-lg' 
+                : 'bg-gray-800/50 text-gray-300 hover:bg-gray-800'
             }`}
-            style={viewMode === 'calendar' ? {
-              background: colors.gradientPrimary,
-              color: '#FFFFFF'
-            } : {
-              border: `1px solid ${colors.borderLight}`,
-              color: colors.textLight,
-              backgroundColor: colors.surfaceLight
-            }}
           >
-            تقويم
+            عرض التقويم
           </button>
         </div>
       </div>
 
+      {/* Content */}
       {loading ? (
-        <LoadingSpinner />
+        <LoadingSpinner message="جاري تحميل المواعيد..." />
       ) : viewMode === 'table' ? (
         <AppointmentsTable 
-          appointments={filteredAppointments()}
-          onEdit={(appointment) => {
-            setSelectedAppointment(appointment)
-            setShowAppointmentModal(true)
-          }}
+          appointments={filteredAppointments}
+          onEdit={handleEditAppointment}
           onDelete={handleDeleteAppointment}
         />
       ) : (
-        <CalendarView appointments={filteredAppointments()} />
+        <CalendarView appointments={filteredAppointments} />
       )}
 
+      {/* Modal */}
       {showAppointmentModal && (
         <AppointmentModal
           appointment={selectedAppointment}
@@ -213,3 +214,5 @@ export default function Appointments() {
     </div>
   )
 }
+
+export default Appointments

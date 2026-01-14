@@ -29,6 +29,16 @@ const TestResultSchema = new mongoose.Schema({
 });
 
 const AppointmentSchema = new mongoose.Schema({
+   appointmentNumber: {
+    type: String,
+    unique: true,
+    sparse: true, // هذا يسمح بقيم null متعددة
+    default: function() {
+      const year = new Date().getFullYear();
+      const randomNum = Math.floor(10000 + Math.random() * 90000);
+      return `APP-${year}-${randomNum}`;
+    }
+  },
   patientName: {
     type: String,
     required: [true, "اسم المريض مطلوب"],
@@ -118,13 +128,11 @@ const AppointmentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Patient",
     required: [true, "معرف المريض مطلوب"],
-    index: true,
   },
   originalId: {
     type: String,
     unique: true,
     sparse: true,
-    index: true
   },
   backupData: {
     type: Map,
@@ -141,10 +149,11 @@ const AppointmentSchema = new mongoose.Schema({
   },
 });
 
+// إزالة الفهرس المكرر - يجب أن يكون مرة واحدة فقط
+// الاحتفاظ بـ index() فقط وإزالة index: true من الحقول
+
 AppointmentSchema.index({ appointmentDate: 1, appointmentTime: 1 });
-AppointmentSchema.index({ patientId: 1 });
 AppointmentSchema.index({ status: 1 });
-AppointmentSchema.index({ createdAt: -1 });
 AppointmentSchema.index({ patientId: 1, appointmentDate: 1 });
 AppointmentSchema.index({ followUpDate: 1 });
 

@@ -255,36 +255,52 @@ exports.createPatient = async (req, res) => {
       });
     }
 
+    // تنظيف البيانات - جعل الحقول غير المطلوبة افتراضياً فارغة
+    const cleanPatientData = {
+      ...patientData,
+      address: patientData.address || "",
+      birthDate: patientData.birthDate || null,
+      email: patientData.email || "",
+      medicalSummary: patientData.medicalSummary || "",
+      allergies: patientData.allergies || "",
+      currentMedications: patientData.currentMedications || "",
+      weight: patientData.weight || null,
+      height: patientData.height || null,
+      bmi: patientData.bmi || null,
+    };
+
     // Format dates if present
-    if (patientData.birthDate) {
-      patientData.birthDate = new Date(patientData.birthDate);
+    if (cleanPatientData.birthDate && cleanPatientData.birthDate !== '') {
+      cleanPatientData.birthDate = new Date(cleanPatientData.birthDate);
+    } else {
+      cleanPatientData.birthDate = null;
     }
 
     // Format chronic diseases dates
-    if (patientData.chronicDiseases && Array.isArray(patientData.chronicDiseases)) {
-      patientData.chronicDiseases = patientData.chronicDiseases.map(disease => ({
+    if (cleanPatientData.chronicDiseases && Array.isArray(cleanPatientData.chronicDiseases)) {
+      cleanPatientData.chronicDiseases = cleanPatientData.chronicDiseases.map(disease => ({
         ...disease,
         diagnosisDate: disease.diagnosisDate ? new Date(disease.diagnosisDate) : null
       }));
     }
 
     // Format test results dates
-    if (patientData.testResults && Array.isArray(patientData.testResults)) {
-      patientData.testResults = patientData.testResults.map(test => ({
+    if (cleanPatientData.testResults && Array.isArray(cleanPatientData.testResults)) {
+      cleanPatientData.testResults = cleanPatientData.testResults.map(test => ({
         ...test,
         testDate: test.testDate ? new Date(test.testDate) : new Date()
       }));
       
       // Set lastTestDate to the latest test date
-      const latestTestDate = patientData.testResults.reduce((latest, test) => {
+      const latestTestDate = cleanPatientData.testResults.reduce((latest, test) => {
         return test.testDate && test.testDate > latest ? test.testDate : latest;
       }, null);
       if (latestTestDate) {
-        patientData.lastTestDate = latestTestDate;
+        cleanPatientData.lastTestDate = latestTestDate;
       }
     }
 
-    const patient = new Patient(patientData);
+    const patient = new Patient(cleanPatientData);
     await patient.save();
 
     res.status(201).json({
@@ -346,49 +362,59 @@ exports.updatePatient = async (req, res) => {
       }
     }
 
+    // تنظيف بيانات التحديث
+    const cleanUpdateData = { ...updateData };
+    
+    // إذا كانت الحقول فارغة، نجعلها null أو string فارغ
+    if (cleanUpdateData.address === undefined) cleanUpdateData.address = patient.address || "";
+    if (cleanUpdateData.birthDate === undefined) cleanUpdateData.birthDate = patient.birthDate;
+    if (cleanUpdateData.email === undefined) cleanUpdateData.email = patient.email || "";
+    
     // Format dates if present
-    if (updateData.birthDate) {
-      updateData.birthDate = new Date(updateData.birthDate);
+    if (cleanUpdateData.birthDate && cleanUpdateData.birthDate !== '') {
+      cleanUpdateData.birthDate = new Date(cleanUpdateData.birthDate);
+    } else if (cleanUpdateData.birthDate === '') {
+      cleanUpdateData.birthDate = null;
     }
 
     // Format chronic diseases dates
-    if (updateData.chronicDiseases && Array.isArray(updateData.chronicDiseases)) {
-      updateData.chronicDiseases = updateData.chronicDiseases.map(disease => ({
+    if (cleanUpdateData.chronicDiseases && Array.isArray(cleanUpdateData.chronicDiseases)) {
+      cleanUpdateData.chronicDiseases = cleanUpdateData.chronicDiseases.map(disease => ({
         ...disease,
         diagnosisDate: disease.diagnosisDate ? new Date(disease.diagnosisDate) : null
       }));
     }
 
     // Format test results dates and update lastTestDate
-    if (updateData.testResults && Array.isArray(updateData.testResults)) {
-      updateData.testResults = updateData.testResults.map(test => ({
+    if (cleanUpdateData.testResults && Array.isArray(cleanUpdateData.testResults)) {
+      cleanUpdateData.testResults = cleanUpdateData.testResults.map(test => ({
         ...test,
         testDate: test.testDate ? new Date(test.testDate) : new Date()
       }));
       
       // Find the latest test date
-      const latestTestDate = updateData.testResults.reduce((latest, test) => {
+      const latestTestDate = cleanUpdateData.testResults.reduce((latest, test) => {
         return test.testDate && test.testDate > latest ? test.testDate : latest;
       }, patient.lastTestDate || null);
       
       if (latestTestDate) {
-        updateData.lastTestDate = latestTestDate;
+        cleanUpdateData.lastTestDate = latestTestDate;
       }
     }
 
     // If doctor suggestions are updated and patient has lastDoctorVisit, keep it
-    if (updateData.doctorSuggestions && !updateData.lastDoctorVisit && patient.lastDoctorVisit) {
-      updateData.lastDoctorVisit = patient.lastDoctorVisit;
+    if (cleanUpdateData.doctorSuggestions && !cleanUpdateData.lastDoctorVisit && patient.lastDoctorVisit) {
+      cleanUpdateData.lastDoctorVisit = patient.lastDoctorVisit;
     }
 
-    Object.assign(patient, updateData);
+    Object.assign(patient, cleanUpdateData);
     patient.updatedAt = new Date();
     await patient.save();
 
-    if (updateData.patientName || updateData.phoneNumber) {
+    if (cleanUpdateData.patientName || cleanUpdateData.phoneNumber) {
       const appointmentUpdate = {};
-      if (updateData.patientName) appointmentUpdate.patientName = updateData.patientName;
-      if (updateData.phoneNumber) appointmentUpdate.phoneNumber = updateData.phoneNumber;
+      if (cleanUpdateData.patientName) appointmentUpdate.patientName = cleanUpdateData.patientName;
+      if (cleanUpdateData.phoneNumber) appointmentUpdate.phoneNumber = cleanUpdateData.phoneNumber;
       
       await Appointment.updateMany(
         { patientId: patient._id },
@@ -423,6 +449,7 @@ exports.updatePatient = async (req, res) => {
     });
   }
 };
+
 
 exports.deletePatient = async (req, res) => {
   try {

@@ -50,6 +50,9 @@ exports.createAppointment = async (req, res) => {
       followUpDate,
       followUpNotes,
       patientId,
+      birthDate,  // إضافة birthDate
+      address,    // إضافة address
+      email,      // إضافة email
     } = req.body;
 
     if (!patientName || !phoneNumber || !appointmentDate || !appointmentTime) {
@@ -77,17 +80,38 @@ exports.createAppointment = async (req, res) => {
         });
       }
     } else {
+      // البحث بالمريض باستخدام رقم الهاتف
       patient = await Patient.findOne({ phoneNumber });
+      
       if (!patient) {
+        // إنشاء مريض جديد مع البيانات الأساسية فقط
         patient = new Patient({
           patientName,
           phoneNumber,
           gender: "male",
+          birthDate: birthDate || null,  // استخدام القيمة المرسلة أو null
+          address: address || "",         // استخدام القيمة المرسلة أو string فارغ
+          email: email || "",            // استخدام القيمة المرسلة أو string فارغ
         });
-        await patient.save();
+        
+        try {
+          await patient.save();
+        } catch (patientError) {
+          // إذا فشل حفظ المريض، إرجاع خطأ مفصل
+          if (patientError.name === "ValidationError") {
+            const errors = Object.values(patientError.errors).map((err) => err.message);
+            return res.status(400).json({
+              success: false,
+              message: "خطأ في بيانات المريض",
+              errors: errors,
+            });
+          }
+          throw patientError;
+        }
       }
     }
 
+    // إنشاء الموعد
     const appointment = new Appointment({
       patientName,
       phoneNumber,
@@ -107,7 +131,7 @@ exports.createAppointment = async (req, res) => {
     await appointment.save();
 
     const populatedAppointment = await Appointment.findById(appointment._id)
-      .populate('patientId', 'patientName phoneNumber birthDate gender email bloodType chronicDiseases');
+      .populate('patientId', 'patientName phoneNumber birthDate gender email address');
 
     res.status(201).json({
       success: true,
@@ -121,7 +145,7 @@ exports.createAppointment = async (req, res) => {
       const errors = Object.values(error.errors).map((err) => err.message);
       return res.status(400).json({
         success: false,
-        message: "خطأ في التحقق من البيانات",
+        message: "خطأ في التحقق من بيانات الموعد",
         errors: errors,
       });
     }
@@ -140,7 +164,6 @@ exports.createAppointment = async (req, res) => {
     });
   }
 };
-
 
 exports.getAdminAppointments = async (req, res) => {
   try {

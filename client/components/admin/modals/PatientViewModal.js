@@ -286,6 +286,14 @@ export default function PatientViewModal({
                 </div>
               </div>
             )}
+            {patient.bmi && (
+              <div>
+                <div className="text-xs mb-1" style={{ color: colors.textLight }}>مؤشر كتلة الجسم (محسوب)</div>
+                <div className="text-sm font-semibold" style={{ color: colors.text }}>
+                  {patient.bmi.toFixed(1)}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -350,6 +358,8 @@ export default function PatientViewModal({
                   {patient.nationalAddress.district && <div>الحي: {patient.nationalAddress.district}</div>}
                   {patient.nationalAddress.city && <div>المدينة: {patient.nationalAddress.city}</div>}
                   {patient.nationalAddress.postalCode && <div>الرمز البريدي: {patient.nationalAddress.postalCode}</div>}
+                  {patient.nationalAddress.buildingNumber && <div>رقم المبنى: {patient.nationalAddress.buildingNumber}</div>}
+                  {patient.nationalAddress.additionalNumber && <div>الرقم الإضافي: {patient.nationalAddress.additionalNumber}</div>}
                 </div>
               </div>
             )}
@@ -389,6 +399,18 @@ export default function PatientViewModal({
               <span className="text-xs" style={{ color: colors.textLight }}>عدد المواعيد</span>
               <span className="text-sm font-semibold" style={{ color: colors.text }}>
                 {patient.appointmentCount || 0}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs" style={{ color: colors.textLight }}>آخر زيارة طبيب</span>
+              <span className="text-sm font-semibold" style={{ color: colors.text }}>
+                {formatDateDisplay(patient.lastDoctorVisit)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs" style={{ color: colors.textLight }}>آخر فحص</span>
+              <span className="text-sm font-semibold" style={{ color: colors.text }}>
+                {formatDateDisplay(patient.lastTestDate)}
               </span>
             </div>
           </div>
@@ -470,7 +492,7 @@ export default function PatientViewModal({
             }}>
               <div className="text-xs mb-1" style={{ color: colors.textLight }}>مؤشر كتلة الجسم</div>
               <div className="text-lg font-bold" style={{ color: colors.primary }}>
-                {calculateBMI(patient.weight, patient.height) || 'غير محدد'}
+                {patient.bmi ? patient.bmi.toFixed(1) : calculateBMI(patient.weight, patient.height) || 'غير محدد'}
               </div>
             </div>
             <div className="text-center p-3 rounded-lg" style={{ 
@@ -514,7 +536,7 @@ export default function PatientViewModal({
                   backgroundColor: colors.primary + '10',
                   color: colors.primary
                 }}>
-                  {source.referralDate ? new Date(source.referralDate).toLocaleDateString('ar-SA') : 'غير محدد'}
+                  {source.referralDate ? formatDateDisplay(source.referralDate) : 'غير محدد'}
                 </span>
               </div>
               
@@ -702,7 +724,7 @@ export default function PatientViewModal({
                   backgroundColor: colors.primary + '10',
                   color: colors.primary
                 }}>
-                  {test.testDate ? new Date(test.testDate).toLocaleDateString('ar-SA') : 'غير محدد'}
+                  {test.testDate ? formatDateDisplay(test.testDate) : 'غير محدد'}
                 </span>
               </div>
               
@@ -815,7 +837,7 @@ export default function PatientViewModal({
                 <div>
                   <span className="text-xs" style={{ color: colors.textLight }}>تاريخ التشخيص:</span>
                   <div className="text-sm font-medium" style={{ color: colors.text }}>
-                    {disease.diagnosisDate ? new Date(disease.diagnosisDate).toLocaleDateString('ar-SA') : 'غير محدد'}
+                    {disease.diagnosisDate ? formatDateDisplay(disease.diagnosisDate) : 'غير محدد'}
                   </div>
                 </div>
                 

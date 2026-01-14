@@ -1,16 +1,17 @@
+// @/components/patients/Patients.jsx
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import PatientsTable from './PatientsTable'
 import PatientModal from './modals/PatientModal'
 import PatientViewModal from './modals/PatientViewModal'
 import AppointmentModal from './modals/AppointmentModal'
-import { colors } from '@/components/shared/constants'
-import { apiRequest, createAppointment, deletePatient } from '@/components/shared/api'
+import { apiRequest } from '@/components/shared/api'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import toast from 'react-hot-toast'
+import debounce from 'lodash/debounce'
 
-export default function Patients() {
+const Patients = () => {
   const [patients, setPatients] = useState([])
   const [loading, setLoading] = useState(false)
   const [loadingAppointments, setLoadingAppointments] = useState(false)
@@ -35,10 +36,13 @@ export default function Patients() {
   const [showPatientModal, setShowPatientModal] = useState(false)
   const [showPatientViewModal, setShowPatientViewModal] = useState(false)
   const [showAppointmentModal, setShowAppointmentModal] = useState(false)
-  const [initialLoad, setInitialLoad] = useState(true)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [searchTimer, setSearchTimer] = useState(null)
+  const [selectedRows, setSelectedRows] = useState([])
 
+  const initialLoadRef = useRef(true)
+  const searchDebounceRef = useRef(null)
+
+  // Memoized fetch function
   const fetchPatients = useCallback(async () => {
     try {
       setLoading(true)
@@ -50,10 +54,7 @@ export default function Patients() {
         )
       }).toString()
       
-      const data = await apiRequest(`/api/patients?${query}`, {
-        showSuccess: false,
-        showError: false
-      })
+      const data = await apiRequest(`/api/patients?${query}`)
       
       if (data.success) {
         setPatients(data.data || [])
@@ -64,68 +65,81 @@ export default function Patients() {
           total: data.total || 0
         }))
         
-        if (initialLoad) {
-          toast.success(`تم تحميل ${data.total || 0} مريض بنجاح`, {
-            duration: 2000,
-            position: 'top-center'
-          })
-          setInitialLoad(false)
+        if (initialLoadRef.current) {
+          toast.success(`تم تحميل ${data.total || 0} مريض`)
+          initialLoadRef.current = false
         }
       } else {
         setPatients([])
-        setPagination({
-          page: 1,
-          totalPages: 1,
-          total: 0,
-          limit: 10
-        })
+        setPagination(prev => ({ ...prev, total: 0, totalPages: 1 }))
       }
     } catch (error) {
       console.error('Error fetching patients:', error)
       setPatients([])
-      setPagination({
-        page: 1,
-        totalPages: 1,
-        total: 0,
-        limit: 10
-      })
       toast.error('فشل في تحميل بيانات المرضى')
     } finally {
       setLoading(false)
     }
-  }, [filters, pagination.page, pagination.limit, initialLoad])
+  }, [filters, pagination.page, pagination.limit])
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
+  // Debounced search
+  const debouncedSearch = useMemo(
+    () => debounce(() => {
+      setPagination(prev => ({ ...prev, page: 1 }))
       fetchPatients()
-    }, searchTimer ? 500 : 0)
+    }, 300),
+    [fetchPatients]
+  )
 
-    return () => clearTimeout(timer)
-  }, [pagination.page, filters.gender, filters.hasAppointments, filters.minAge, filters.maxAge, fetchPatients])
-
-  useEffect(() => {
-    if (searchTimer) {
-      clearTimeout(searchTimer)
+  // Handle filter changes
+  const handleFilterChange = useCallback((key, value) => {
+    setFilters(prev => ({ ...prev, [key]: value }))
+    if (key === 'search') {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current)
+      }
+      searchDebounceRef.current = setTimeout(() => {
+        setPagination(prev => ({ ...prev, page: 1 }))
+        fetchPatients()
+      }, 300)
+    } else {
+      setPagination(prev => ({ ...prev, page: 1 }))
     }
-    
-    const timer = setTimeout(() => {
-      fetchPatients()
-    }, 300)
-    
-    setSearchTimer(timer)
-    
-    return () => clearTimeout(timer)
-  }, [filters.search, fetchPatients])
+  }, [fetchPatients])
 
-  const fetchPatientAppointments = async (patientId) => {
+  // Handle numeric filter changes
+  const handleNumericFilterChange = useCallback((key, value) => {
+    setFilters(prev => ({ ...prev, [key]: value }))
+  }, [])
+
+  // Fetch data when filters change (except search)
+  useEffect(() => {
+    const hasNonSearchFilters = Object.entries(filters)
+      .filter(([key]) => key !== 'search')
+      .some(([_, value]) => value !== '')
+    
+    if (hasNonSearchFilters) {
+      fetchPatients()
+    }
+  }, [filters.gender, filters.hasAppointments, filters.minAge, filters.maxAge, filters.bloodType, filters.hasChronicDiseases, filters.hasTestResults, fetchPatients])
+
+  // Initial fetch
+  useEffect(() => {
+    fetchPatients()
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current)
+      }
+    }
+  }, [fetchPatients])
+
+  // Fetch patient appointments
+  const fetchPatientAppointments = useCallback(async (patientId) => {
     if (!patientId) return
     
     try {
       setLoadingAppointments(true)
-      const data = await apiRequest(`/api/appointments/patient/${patientId}?limit=5`, {
-        showSuccess: false,
-        showError: false
-      })
+      const data = await apiRequest(`/api/appointments/patient/${patientId}?limit=5`)
       
       if (data.success) {
         setPatientAppointments(data.data || [])
@@ -135,21 +149,13 @@ export default function Patients() {
     } catch (error) {
       console.error('Error fetching appointments:', error)
       setPatientAppointments([])
-      toast.error('فشل في تحميل المواعيد')
     } finally {
       setLoadingAppointments(false)
     }
-  }
+  }, [])
 
-  const handleFilterChange = (key, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [key]: value
-    }))
-    setPagination(prev => ({ ...prev, page: 1 }))
-  }
-
-  const handleSavePatient = async (patientData) => {
+  // Handle save patient
+  const handleSavePatient = useCallback(async (patientData) => {
     try {
       setLoading(true)
       const method = patientData._id ? 'PUT' : 'POST'
@@ -159,12 +165,7 @@ export default function Patients() {
       
       const data = await apiRequest(url, {
         method,
-        body: JSON.stringify(patientData),
-        showSuccess: true,
-        successMessage: patientData._id 
-          ? 'تم تحديث بيانات المريض بنجاح'
-          : 'تم إنشاء المريض بنجاح',
-        showError: true
+        body: JSON.stringify(patientData)
       })
       
       if (data.success) {
@@ -173,8 +174,11 @@ export default function Patients() {
         setSelectedPatient(null)
         
         if (showPatientViewModal && selectedPatient && selectedPatient._id === patientData._id) {
-          setSelectedPatient(data.data || patientData)
+          const updatedPatient = { ...selectedPatient, ...patientData }
+          setSelectedPatient(updatedPatient)
         }
+        
+        toast.success(patientData._id ? 'تم تحديث بيانات المريض' : 'تم إنشاء المريض')
       }
     } catch (error) {
       console.error('Error saving patient:', error)
@@ -182,19 +186,23 @@ export default function Patients() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [fetchPatients, selectedPatient, showPatientViewModal])
 
-  const handleDeletePatient = async (patientId) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذا المريض وجميع مواعيده؟ هذا الإجراء لا يمكن التراجع عنه.')) {
+  // Handle delete patient
+  const handleDeletePatient = useCallback(async (patientId) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذا المريض وجميع مواعيده؟')) {
       return
     }
     
     try {
       setIsDeleting(true)
-      const data = await deletePatient(patientId)
+      const data = await apiRequest(`/api/patients/${patientId}`, {
+        method: 'DELETE'
+      })
       
       if (data.success) {
         await fetchPatients()
+        setSelectedRows(prev => prev.filter(id => id !== patientId))
         
         if (selectedPatient && selectedPatient._id === patientId) {
           setShowPatientViewModal(false)
@@ -202,7 +210,7 @@ export default function Patients() {
           setPatientAppointments([])
         }
         
-        toast.success(`تم حذف المريض و ${data.data?.deletedAppointments || 0} موعد`)
+        toast.success(`تم حذف المريض`)
       }
     } catch (error) {
       console.error('Error deleting patient:', error)
@@ -210,15 +218,51 @@ export default function Patients() {
     } finally {
       setIsDeleting(false)
     }
-  }
+  }, [fetchPatients, selectedPatient])
 
-  const handleSaveAppointment = async (appointmentData) => {
+  // Handle bulk delete
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedRows.length === 0) {
+      toast.error('لم يتم اختيار أي مرضى للحذف')
+      return
+    }
+
+    if (!window.confirm(`هل أنت متأكد من حذف ${selectedRows.length} مريض؟`)) {
+      return
+    }
+
+    try {
+      setIsDeleting(true)
+      // Note: You might want to implement a bulk delete endpoint
+      // For now, we'll delete one by one
+      for (const patientId of selectedRows) {
+        await apiRequest(`/api/patients/${patientId}`, {
+          method: 'DELETE'
+        })
+      }
+      
+      await fetchPatients()
+      setSelectedRows([])
+      toast.success(`تم حذف ${selectedRows.length} مريض`)
+    } catch (error) {
+      console.error('Error bulk deleting patients:', error)
+      toast.error('فشل في حذف المرضى')
+    } finally {
+      setIsDeleting(false)
+    }
+  }, [selectedRows, fetchPatients])
+
+  // Handle save appointment
+  const handleSaveAppointment = useCallback(async (appointmentData) => {
     try {
       setLoading(true)
       
-      const data = await createAppointment({
-        ...appointmentData,
-        patientId: selectedPatient?._id || appointmentData.patientId
+      const data = await apiRequest('/api/appointments', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...appointmentData,
+          patientId: selectedPatient?._id || appointmentData.patientId
+        })
       })
       
       if (data.success) {
@@ -229,8 +273,7 @@ export default function Patients() {
         }
         
         await fetchPatients()
-        
-        toast.success('تم إضافة الموعد بنجاح')
+        toast.success('تم إضافة الموعد')
       }
     } catch (error) {
       console.error('Error adding appointment:', error)
@@ -238,9 +281,10 @@ export default function Patients() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedPatient, fetchPatientAppointments, fetchPatients])
 
-  const handleViewPatient = async (patient) => {
+  // Handle view patient
+  const handleViewPatient = useCallback(async (patient) => {
     try {
       setSelectedPatient(patient)
       setShowPatientViewModal(true)
@@ -249,19 +293,10 @@ export default function Patients() {
       console.error('Error viewing patient:', error)
       toast.error('فشل في تحميل بيانات المريض')
     }
-  }
+  }, [fetchPatientAppointments])
 
-  const handleEditFromViewModal = () => {
-    setShowPatientViewModal(false)
-    setShowPatientModal(true)
-  }
-
-  const handleAddAppointmentFromViewModal = () => {
-    setShowPatientViewModal(false)
-    setShowAppointmentModal(true)
-  }
-
-  const handleResetFilters = () => {
+  // Handle reset filters
+  const handleResetFilters = useCallback(() => {
     setFilters({
       search: '',
       gender: '',
@@ -274,108 +309,92 @@ export default function Patients() {
     })
     setPagination(prev => ({ ...prev, page: 1 }))
     toast.success('تم إعادة تعيين جميع الفلاتر')
-  }
+  }, [])
 
-  const handlePageChange = (page) => {
+  // Handle page change
+  const handlePageChange = useCallback((page) => {
     if (page < 1 || page > pagination.totalPages) return
-    
     setPagination(prev => ({ ...prev, page }))
-    toast.success(`تم التحرك إلى الصفحة ${page}`)
-  }
+  }, [pagination.totalPages])
 
-  const handleRefresh = () => {
-    fetchPatients()
-    toast.success('تم تحديث البيانات بنجاح')
-  }
+  // Handle limit change
+  const handleLimitChange = useCallback((limit) => {
+    setPagination(prev => ({ ...prev, limit, page: 1 }))
+  }, [])
+
+  // Get active filters count
+  const activeFiltersCount = useMemo(() => {
+    return Object.values(filters).filter(value => value !== '').length
+  }, [filters])
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border p-6 shadow-xl" style={{ 
-        borderColor: colors.border,
-        backgroundColor: colors.surface
-      }}>
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
-          <div>
-            <h3 className="text-xl font-bold" style={{ color: colors.text }}>إدارة المرضى</h3>
-            <p className="text-sm mt-1" style={{ color: colors.textLight }}>
-              إجمالي المرضى: <span className="font-semibold">{pagination.total}</span> | 
-              الصفحة: <span className="font-semibold">{pagination.page}</span> من <span className="font-semibold">{pagination.totalPages}</span>
-            </p>
-          </div>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-100">إدارة المرضى</h1>
+          <p className="text-sm text-gray-400 mt-1">
+            إدارة سجلات المرضى وبياناتهم الصحية
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={fetchPatients}
+            disabled={loading}
+            className="px-4 py-2.5 bg-gray-800/50 text-gray-300 text-sm font-medium rounded-xl hover:bg-gray-800 transition-colors duration-200 flex items-center gap-2 disabled:opacity-50"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            تحديث
+          </button>
           
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleRefresh}
-              disabled={loading || isDeleting}
-              className="px-4 py-2.5 rounded-xl text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ 
-                borderColor: colors.borderLight,
-                color: colors.textLight,
-                backgroundColor: colors.surfaceLight
-              }}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          <button
+            onClick={() => {
+              setSelectedPatient(null)
+              setShowPatientModal(true)
+            }}
+            disabled={loading}
+            className="px-4 py-2.5 bg-gradient-to-l from-emerald-600 to-emerald-500 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-all duration-200 flex items-center gap-2 shadow-lg"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            إضافة مريض جديد
+          </button>
+        </div>
+      </div>
+
+      {/* Filters Card */}
+      <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-800 p-5">
+        {/* Search Bar */}
+        <div className="mb-6">
+          <div className="relative">
+            <input
+              type="text"
+              value={filters.search}
+              onChange={(e) => handleFilterChange('search', e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-gray-900/30 border border-gray-700 rounded-xl text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              placeholder="ابحث باسم المريض، رقم الهاتف أو البريد الإلكتروني"
+              disabled={loading}
+            />
+            <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-              تحديث
-            </button>
-            
-            <button
-              onClick={() => {
-                setSelectedPatient(null)
-                setShowPatientModal(true)
-              }}
-              disabled={loading || isDeleting}
-              className="px-5 py-2.5 rounded-xl text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ 
-                background: colors.gradientSuccess,
-                color: '#FFFFFF'
-              }}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              إضافة مريض جديد
-            </button>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-8 gap-4">
-          <div className="md:col-span-2">
-            <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>البحث</label>
-            <div className="relative">
-              <input
-                type="text"
-                value={filters.search}
-                onChange={(e) => handleFilterChange('search', e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                style={{ 
-                  borderColor: colors.border,
-                  backgroundColor: colors.background,
-                  color: colors.text
-                }}
-                placeholder="ابحث باسم المريض، رقم الهاتف أو البريد الإلكتروني"
-                disabled={loading}
-              />
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2" style={{ color: colors.textLight }}>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          
+        {/* Filter Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+          {/* Gender Filter */}
           <div>
-            <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>الجنس</label>
+            <label className="block text-xs font-medium text-gray-400 mb-2">الجنس</label>
             <select
               value={filters.gender}
               onChange={(e) => handleFilterChange('gender', e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-              style={{ 
-                borderColor: colors.border,
-                backgroundColor: colors.background,
-                color: colors.text
-              }}
+              className="w-full px-3 py-2 bg-gray-900/30 border border-gray-700 rounded-lg text-gray-100 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
               disabled={loading}
             >
               <option value="">الجميع</option>
@@ -384,17 +403,13 @@ export default function Patients() {
             </select>
           </div>
           
+          {/* Blood Type Filter */}
           <div>
-            <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>فصيلة الدم</label>
+            <label className="block text-xs font-medium text-gray-400 mb-2">فصيلة الدم</label>
             <select
               value={filters.bloodType}
               onChange={(e) => handleFilterChange('bloodType', e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-              style={{ 
-                borderColor: colors.border,
-                backgroundColor: colors.background,
-                color: colors.text
-              }}
+              className="w-full px-3 py-2 bg-gray-900/30 border border-gray-700 rounded-lg text-gray-100 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
               disabled={loading}
             >
               <option value="">الجميع</option>
@@ -409,17 +424,13 @@ export default function Patients() {
             </select>
           </div>
 
+          {/* Appointments Filter */}
           <div>
-            <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>المواعيد</label>
+            <label className="block text-xs font-medium text-gray-400 mb-2">المواعيد</label>
             <select
               value={filters.hasAppointments}
               onChange={(e) => handleFilterChange('hasAppointments', e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-              style={{ 
-                borderColor: colors.border,
-                backgroundColor: colors.background,
-                color: colors.text
-              }}
+              className="w-full px-3 py-2 bg-gray-900/30 border border-gray-700 rounded-lg text-gray-100 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
               disabled={loading}
             >
               <option value="">الجميع</option>
@@ -428,17 +439,13 @@ export default function Patients() {
             </select>
           </div>
 
+          {/* Chronic Diseases Filter */}
           <div>
-            <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>الأمراض المزمنة</label>
+            <label className="block text-xs font-medium text-gray-400 mb-2">الأمراض المزمنة</label>
             <select
               value={filters.hasChronicDiseases}
               onChange={(e) => handleFilterChange('hasChronicDiseases', e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-              style={{ 
-                borderColor: colors.border,
-                backgroundColor: colors.background,
-                color: colors.text
-              }}
+              className="w-full px-3 py-2 bg-gray-900/30 border border-gray-700 rounded-lg text-gray-100 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
               disabled={loading}
             >
               <option value="">الجميع</option>
@@ -447,17 +454,13 @@ export default function Patients() {
             </select>
           </div>
 
+          {/* Test Results Filter */}
           <div>
-            <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>الفحوصات</label>
+            <label className="block text-xs font-medium text-gray-400 mb-2">الفحوصات</label>
             <select
               value={filters.hasTestResults}
               onChange={(e) => handleFilterChange('hasTestResults', e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-              style={{ 
-                borderColor: colors.border,
-                backgroundColor: colors.background,
-                color: colors.text
-              }}
+              className="w-full px-3 py-2 bg-gray-900/30 border border-gray-700 rounded-lg text-gray-100 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
               disabled={loading}
             >
               <option value="">الجميع</option>
@@ -466,132 +469,125 @@ export default function Patients() {
             </select>
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>العمر من</label>
-            <input
-              type="number"
-              min="0"
-              max="120"
-              value={filters.minAge}
-              onChange={(e) => handleFilterChange('minAge', e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-              style={{ 
-                borderColor: colors.border,
-                backgroundColor: colors.background,
-                color: colors.text
-              }}
-              placeholder="0"
-              disabled={loading}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold mb-2" style={{ color: colors.textLight }}>إلى</label>
-            <input
-              type="number"
-              min="0"
-              max="120"
-              value={filters.maxAge}
-              onChange={(e) => handleFilterChange('maxAge', e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-              style={{ 
-                borderColor: colors.border,
-                backgroundColor: colors.background,
-                color: colors.text
-              }}
-              placeholder="120"
-              disabled={loading}
-            />
+          {/* Age Range */}
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-400 mb-2">العمر</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                max="120"
+                value={filters.minAge}
+                onChange={(e) => handleNumericFilterChange('minAge', e.target.value)}
+                className="flex-1 px-3 py-2 bg-gray-900/30 border border-gray-700 rounded-lg text-gray-100 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                placeholder="من"
+                disabled={loading}
+              />
+              <span className="text-gray-400 text-sm">-</span>
+              <input
+                type="number"
+                min="0"
+                max="120"
+                value={filters.maxAge}
+                onChange={(e) => handleNumericFilterChange('maxAge', e.target.value)}
+                className="flex-1 px-3 py-2 bg-gray-900/30 border border-gray-700 rounded-lg text-gray-100 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                placeholder="إلى"
+                disabled={loading}
+              />
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-4 border-t" style={{ borderColor: colors.border }}>
-          <div className="flex items-center gap-2 text-sm" style={{ color: colors.textLight }}>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-            </svg>
-            <span>الفلاتر النشطة:</span>
-            {Object.entries(filters).map(([key, value]) => (
-              value && key !== 'search' ? (
-                <span key={key} className="px-2 py-1 rounded-md text-xs" style={{ 
-                  background: colors.surfaceLight,
-                  color: colors.textLight 
-                }}>
-                  {key === 'gender' ? (value === 'male' ? 'ذكر' : 'أنثى') : 
-                   key === 'hasAppointments' ? (value === 'true' ? 'لديه مواعيد' : 'بدون مواعيد') :
-                   key === 'bloodType' ? `فصيلة الدم: ${value}` :
-                   key === 'hasChronicDiseases' ? (value === 'true' ? 'أمراض مزمنة' : 'بدون أمراض') :
-                   key === 'hasTestResults' ? (value === 'true' ? 'لديه فحوصات' : 'بدون فحوصات') :
-                   key === 'minAge' ? `من ${value} سنة` :
-                   key === 'maxAge' ? `إلى ${value} سنة` : value}
-                </span>
-              ) : null
-            ))}
-            {filters.search && (
-              <span className="px-2 py-1 rounded-md text-xs" style={{ 
-                background: colors.surfaceLight,
-                color: colors.textLight 
-              }}>
-                بحث: "{filters.search}"
+        {/* Filter Actions */}
+        <div className="flex items-center justify-between pt-4 border-t border-gray-800/50">
+          <div className="flex items-center gap-3">
+            {activeFiltersCount > 0 && (
+              <span className="text-xs text-gray-400">
+                {activeFiltersCount} فلتر نشط
               </span>
             )}
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <button
               onClick={handleResetFilters}
-              disabled={loading}
-              className="px-4 py-2 rounded-lg border text-sm font-medium hover:opacity-90 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ 
-                borderColor: colors.borderLight,
-                color: colors.textLight,
-                backgroundColor: colors.surfaceLight
-              }}
+              disabled={loading || activeFiltersCount === 0}
+              className="px-4 py-2 text-sm text-gray-300 hover:text-gray-100 hover:bg-gray-800 rounded-lg transition-colors duration-200 disabled:opacity-50"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
               إعادة تعيين
             </button>
-            
             <button
-              onClick={() => fetchPatients()}
+              onClick={fetchPatients}
               disabled={loading}
-              className="px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ 
-                background: colors.gradientPrimary,
-                color: '#FFFFFF'
-              }}
+              className="px-4 py-2 bg-gradient-to-l from-blue-600 to-blue-500 text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-              </svg>
               تطبيق الفلاتر
             </button>
           </div>
         </div>
       </div>
 
+      {/* Bulk Actions Bar */}
+      {selectedRows.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-900/20 to-amber-800/10 border border-amber-800/30 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
+              <span className="text-sm font-bold text-amber-400">{selectedRows.length}</span>
+            </div>
+            <span className="text-sm font-medium text-amber-300">
+              تم اختيار {selectedRows.length} مريض
+            </span>
+          </div>
+          <button
+            onClick={handleBulkDelete}
+            disabled={isDeleting}
+            className="px-4 py-2 bg-gradient-to-l from-rose-600 to-rose-500 text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            حذف المختارين
+          </button>
+        </div>
+      )}
+
+      {/* Content */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-12 space-y-4">
-          <LoadingSpinner />
-          <p className="text-sm" style={{ color: colors.textLight }}>جاري تحميل بيانات المرضى...</p>
+          <LoadingSpinner message="جاري تحميل بيانات المرضى..." />
         </div>
       ) : (
         <PatientsTable 
           patients={patients}
           pagination={pagination}
+          selectedRows={selectedRows}
           onPageChange={handlePageChange}
+          onLimitChange={handleLimitChange}
           onView={handleViewPatient}
           onEdit={(patient) => {
             setSelectedPatient(patient)
             setShowPatientModal(true)
           }}
           onDelete={handleDeletePatient}
+          onSelectRow={(patientId) => {
+            setSelectedRows(prev => 
+              prev.includes(patientId) 
+                ? prev.filter(id => id !== patientId)
+                : [...prev, patientId]
+            )
+          }}
+          onSelectAll={() => {
+            setSelectedRows(prev => 
+              prev.length === patients.length 
+                ? [] 
+                : patients.map(p => p._id)
+            )
+          }}
           disabled={isDeleting}
         />
       )}
 
+      {/* Modals */}
       {showPatientModal && (
         <PatientModal
           patient={selectedPatient}
@@ -613,8 +609,14 @@ export default function Patients() {
             setSelectedPatient(null)
             setPatientAppointments([])
           }}
-          onEdit={handleEditFromViewModal}
-          onAddAppointment={handleAddAppointmentFromViewModal}
+          onEdit={() => {
+            setShowPatientViewModal(false)
+            setTimeout(() => setShowPatientModal(true), 100)
+          }}
+          onAddAppointment={() => {
+            setShowPatientViewModal(false)
+            setTimeout(() => setShowAppointmentModal(true), 100)
+          }}
           onRefreshAppointments={() => fetchPatientAppointments(selectedPatient._id)}
         />
       )}
@@ -630,3 +632,5 @@ export default function Patients() {
     </div>
   )
 }
+
+export default Patients

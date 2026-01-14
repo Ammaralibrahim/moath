@@ -24,15 +24,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
     // معلومات التسجيل
     patientId: '',
     registrationDate: '',
-    referralSources: [{
-      doctorName: '',
-      clinicName: '',
-      referralDate: '',
-      specialty: '',
-      contactNumber: '',
-      email: '',
-      notes: ''
-    }],
+    referralSources: [],
     
     // البيانات الطبية الأساسية
     medicalSummary: '',
@@ -40,6 +32,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
     currentMedications: '',
     weight: '',
     height: '',
+    bmi: '',
     
     // بيانات التأمين
     insurance: {
@@ -55,7 +48,15 @@ export default function PatientModal({ patient, onClose, onSave }) {
     doctorSuggestions: '',
     bloodType: 'غير معروف',
     chronicDiseases: [],
-    testResults: []
+    testResults: [],
+    
+    // حالة المريض
+    isActive: true,
+    totalVisits: 0,
+    appointmentCount: 0,
+    lastVisitDate: '',
+    lastDoctorVisit: '',
+    lastTestDate: ''
   })
   
   const [errors, setErrors] = useState({})
@@ -64,11 +65,21 @@ export default function PatientModal({ patient, onClose, onSave }) {
 
   useEffect(() => {
     if (patient) {
+      // Tarih formatlarını düzelt
+      const formatDateForInput = (date) => {
+        if (!date) return ''
+        try {
+          const d = new Date(date)
+          return d.toISOString().split('T')[0]
+        } catch (error) {
+          return ''
+        }
+      }
+
       setFormData({
         // البيانات الديموغرافية
         patientName: patient.patientName || '',
-        birthDate: patient.birthDate ? 
-          new Date(patient.birthDate).toISOString().split('T')[0] : '',
+        birthDate: formatDateForInput(patient.birthDate),
         gender: patient.gender || 'male',
         address: patient.address || '',
         phoneNumber: patient.phoneNumber || '',
@@ -84,17 +95,8 @@ export default function PatientModal({ patient, onClose, onSave }) {
         
         // معلومات التسجيل
         patientId: patient.patientId || '',
-        registrationDate: patient.registrationDate ? 
-          new Date(patient.registrationDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-        referralSources: patient.referralSources?.length > 0 ? patient.referralSources : [{
-          doctorName: '',
-          clinicName: '',
-          referralDate: '',
-          specialty: '',
-          contactNumber: '',
-          email: '',
-          notes: ''
-        }],
+        registrationDate: formatDateForInput(patient.registrationDate) || formatDateForInput(new Date()),
+        referralSources: patient.referralSources || [],
         
         // البيانات الطبية الأساسية
         medicalSummary: patient.medicalSummary || '',
@@ -102,6 +104,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
         currentMedications: patient.currentMedications || '',
         weight: patient.weight || '',
         height: patient.height || '',
+        bmi: patient.bmi || '',
         
         // بيانات التأمين
         insurance: patient.insurance || {
@@ -117,7 +120,15 @@ export default function PatientModal({ patient, onClose, onSave }) {
         doctorSuggestions: patient.doctorSuggestions || '',
         bloodType: patient.bloodType || 'غير معروف',
         chronicDiseases: patient.chronicDiseases || [],
-        testResults: patient.testResults || []
+        testResults: patient.testResults || [],
+        
+        // حالة المريض
+        isActive: patient.isActive !== undefined ? patient.isActive : true,
+        totalVisits: patient.totalVisits || 0,
+        appointmentCount: patient.appointmentCount || 0,
+        lastVisitDate: formatDateForInput(patient.lastVisitDate),
+        lastDoctorVisit: formatDateForInput(patient.lastDoctorVisit),
+        lastTestDate: formatDateForInput(patient.lastTestDate)
       })
     } else {
       // توليد رقم ملف فريد للمريض الجديد
@@ -126,36 +137,91 @@ export default function PatientModal({ patient, onClose, onSave }) {
       setFormData(prev => ({
         ...prev,
         patientId: `PAT-${year}-${randomNum}`,
-        registrationDate: new Date().toISOString().split('T')[0]
+        registrationDate: new Date().toISOString().split('T')[0],
+        isActive: true
       }))
     }
   }, [patient])
 
+  // Hangi hata hangi bölüme ait tespit etmek için yardımcı fonksiyon
+  const getSectionForError = (errorKey) => {
+    const demographicErrors = ['patientName', 'birthDate', 'gender', 'address', 'phoneNumber', 'email', 'isActive'];
+    const registrationErrors = ['patientId', 'registrationDate', 'lastVisitDate', 'totalVisits', 'appointmentCount'];
+    const medicalErrors = ['medicalSummary', 'allergies', 'currentMedications', 'weight', 'height', 'bmi', 'bloodType', 'lastDoctorVisit', 'lastTestDate'];
+    const insuranceErrors = ['insurance.companyName', 'insurance.policyNumber', 'insurance.coveragePercentage', 'insurance.expiryDate', 'insurance.isActive', 'insurance.notes'];
+    const additionalErrors = ['doctorSuggestions'];
+
+    // Dinamik array hataları için kontrol
+    if (errorKey.startsWith('referralSources.')) return 'registration';
+    if (errorKey.startsWith('chronicDiseases.')) return 'medical';
+    if (errorKey.startsWith('testResults.')) return 'tests';
+    if (errorKey.startsWith('insurance.')) return 'insurance';
+    
+    if (demographicErrors.includes(errorKey)) return 'demographic';
+    if (registrationErrors.includes(errorKey)) return 'registration';
+    if (medicalErrors.includes(errorKey)) return 'medical';
+    if (insuranceErrors.includes(errorKey)) return 'insurance';
+    if (additionalErrors.includes(errorKey)) return 'additional';
+    
+    return 'demographic'; // Varsayılan olarak demographic bölümüne git
+  }
+
+  // Her bölüm değiştiğinde hataları temizle
+  useEffect(() => {
+    // Aktif bölümdeki hataları temizle
+    const sectionFields = {
+      demographic: ['patientName', 'birthDate', 'address', 'phoneNumber', 'email'],
+      registration: ['patientId', 'registrationDate', 'lastVisitDate', 'totalVisits', 'appointmentCount'],
+      medical: ['weight', 'height'],
+      insurance: ['insurance.coveragePercentage'],
+      tests: [],
+      additional: []
+    };
+
+    const currentSectionFields = sectionFields[activeSection] || [];
+    const updatedErrors = { ...errors };
+    
+    currentSectionFields.forEach(field => {
+      if (updatedErrors[field]) {
+        delete updatedErrors[field];
+      }
+    });
+    
+    if (Object.keys(updatedErrors).length !== Object.keys(errors).length) {
+      setErrors(updatedErrors);
+    }
+  }, [activeSection]);
+
   const handleChange = (e) => {
-    const { name, value } = e.target
+    const { name, value, type, checked } = e.target
     
     if (name.includes('.')) {
       const [parent, child] = name.split('.')
-      setFormData(prev => ({
-        ...prev,
-        [parent]: {
-          ...prev[parent],
-          [child]: value
-        }
-      }))
-    } else if (name.includes('nationalAddress.')) {
-      const [, field] = name.split('nationalAddress.')
-      setFormData(prev => ({
-        ...prev,
-        nationalAddress: {
-          ...prev.nationalAddress,
-          [field]: value
-        }
-      }))
+      
+      if (parent === 'insurance') {
+        setFormData(prev => ({
+          ...prev,
+          [parent]: {
+            ...prev[parent],
+            [child]: type === 'checkbox' ? checked : value
+          }
+        }))
+      } else if (parent === 'nationalAddress') {
+        setFormData(prev => ({
+          ...prev,
+          nationalAddress: {
+            ...prev.nationalAddress,
+            [child]: value
+          }
+        }))
+      }
+    } else if (type === 'checkbox') {
+      setFormData(prev => ({ ...prev, [name]: checked }))
     } else {
       setFormData(prev => ({ ...prev, [name]: value }))
     }
     
+    // Clear error for this field
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }))
     }
@@ -173,7 +239,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
       referralSources: [...prev.referralSources, {
         doctorName: '',
         clinicName: '',
-        referralDate: '',
+        referralDate: new Date().toISOString().split('T')[0],
         specialty: '',
         contactNumber: '',
         email: '',
@@ -198,7 +264,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
       ...prev,
       chronicDiseases: [...prev.chronicDiseases, {
         diseaseName: '',
-        diagnosisDate: '',
+        diagnosisDate: new Date().toISOString().split('T')[0],
         severity: 'متوسط',
         currentStatus: 'مستقر',
         notes: ''
@@ -237,6 +303,17 @@ export default function PatientModal({ patient, onClose, onSave }) {
     const updatedTests = formData.testResults.filter((_, i) => i !== index)
     setFormData(prev => ({ ...prev, testResults: updatedTests }))
   }
+
+  // BMI hesaplama
+  useEffect(() => {
+    if (formData.weight && formData.height && formData.height > 0) {
+      const heightInMeters = formData.height / 100
+      const bmi = formData.weight / (heightInMeters * heightInMeters)
+      setFormData(prev => ({ ...prev, bmi: bmi.toFixed(2) }))
+    } else {
+      setFormData(prev => ({ ...prev, bmi: '' }))
+    }
+  }, [formData.weight, formData.height])
 
   const validateForm = () => {
     const newErrors = {}
@@ -292,32 +369,83 @@ export default function PatientModal({ patient, onClose, onSave }) {
     
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors)
+      
+      // İlk hatayı bul ve ilgili bölüme geç
+      const firstErrorKey = Object.keys(validationErrors)[0]
+      const section = getSectionForError(firstErrorKey)
+      setActiveSection(section)
+      
+      // Hatalı input'a odaklan
+      setTimeout(() => {
+        // Önce name attribute'una göre ara
+        let errorElement = document.querySelector(`[name="${firstErrorKey}"]`);
+        
+        // Eğer bulunamazsa, nested field için özel kontrol
+        if (!errorElement && firstErrorKey.includes('.')) {
+          const [parent, child] = firstErrorKey.split('.');
+          // Örnek: insurance.coveragePercentage için
+          errorElement = document.querySelector(`[name="${parent}.${child}"]`);
+        }
+        
+        if (errorElement) {
+          errorElement.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+          errorElement.focus();
+          
+          // Input'u hata renkleriyle vurgula
+          errorElement.classList.add('border-red-500', 'ring-2', 'ring-red-500/20');
+          setTimeout(() => {
+            errorElement.classList.remove('ring-2', 'ring-red-500/20');
+          }, 2000);
+        }
+      }, 100);
+      
       return
     }
 
     setIsSubmitting(true)
     
     try {
+      // Tarih formatlarını düzelt
+      const formatDateForAPI = (dateString) => {
+        if (!dateString) return null
+        try {
+          return new Date(dateString)
+        } catch (error) {
+          return null
+        }
+      }
+
       const patientData = {
         ...formData,
-        birthDate: new Date(formData.birthDate),
-        registrationDate: new Date(formData.registrationDate),
+        birthDate: formatDateForAPI(formData.birthDate),
+        registrationDate: formatDateForAPI(formData.registrationDate) || new Date(),
+        lastVisitDate: formatDateForAPI(formData.lastVisitDate),
+        lastDoctorVisit: formatDateForAPI(formData.lastDoctorVisit),
+        lastTestDate: formatDateForAPI(formData.lastTestDate),
+        
         referralSources: formData.referralSources.map(source => ({
           ...source,
-          referralDate: source.referralDate ? new Date(source.referralDate) : new Date()
+          referralDate: formatDateForAPI(source.referralDate) || new Date()
         })),
+        
         insurance: {
           ...formData.insurance,
-          expiryDate: formData.insurance.expiryDate ? new Date(formData.insurance.expiryDate) : null
+          expiryDate: formatDateForAPI(formData.insurance.expiryDate)
         },
+        
         chronicDiseases: formData.chronicDiseases.map(disease => ({
           ...disease,
-          diagnosisDate: disease.diagnosisDate ? new Date(disease.diagnosisDate) : null
+          diagnosisDate: formatDateForAPI(disease.diagnosisDate)
         })),
+        
         testResults: formData.testResults.map(test => ({
           ...test,
-          testDate: test.testDate ? new Date(test.testDate) : new Date()
+          testDate: formatDateForAPI(test.testDate) || new Date()
         })),
+        
         _id: patient?._id || null
       }
       
@@ -587,6 +715,23 @@ export default function PatientModal({ patient, onClose, onSave }) {
             </div>
           </div>
         </div>
+
+        {/* حالة المريض */}
+        <div>
+          <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
+            حالة المريض
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              name="isActive"
+              checked={formData.isActive}
+              onChange={handleChange}
+              className="w-4 h-4"
+            />
+            <span style={{ color: colors.text }}>مريض نشط</span>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -658,6 +803,69 @@ export default function PatientModal({ patient, onClose, onSave }) {
             disabled={isSubmitting}
           />
         </div>
+
+        {/* آخر زيارة */}
+        <div>
+          <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
+            تاريخ آخر زيارة
+          </label>
+          <input
+            type="date"
+            name="lastVisitDate"
+            value={formData.lastVisitDate}
+            onChange={handleChange}
+            max={new Date().toISOString().split('T')[0]}
+            className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+            style={{ 
+              borderColor: colors.border,
+              backgroundColor: colors.background,
+              color: colors.text
+            }}
+            disabled={isSubmitting}
+          />
+        </div>
+
+        {/* إجمالي الزيارات */}
+        <div>
+          <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
+            إجمالي الزيارات
+          </label>
+          <input
+            type="number"
+            name="totalVisits"
+            value={formData.totalVisits}
+            onChange={handleChange}
+            min="0"
+            className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+            style={{ 
+              borderColor: colors.border,
+              backgroundColor: colors.background,
+              color: colors.text
+            }}
+            disabled={isSubmitting}
+          />
+        </div>
+
+        {/* عدد المواعيد */}
+        <div>
+          <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
+            عدد المواعيد
+          </label>
+          <input
+            type="number"
+            name="appointmentCount"
+            value={formData.appointmentCount}
+            onChange={handleChange}
+            min="0"
+            className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+            style={{ 
+              borderColor: colors.border,
+              backgroundColor: colors.background,
+              color: colors.text
+            }}
+            disabled={isSubmitting}
+          />
+        </div>
       </div>
 
       {/* مصادر الإحالة */}
@@ -686,15 +894,13 @@ export default function PatientModal({ patient, onClose, onSave }) {
               <h6 className="font-medium" style={{ color: colors.text }}>
                 مصدر الإحالة #{index + 1}
               </h6>
-              {index > 0 && (
-                <button
-                  type="button"
-                  onClick={() => removeReferralSource(index)}
-                  className="text-red-500 hover:text-red-700 text-sm"
-                >
-                  حذف
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => removeReferralSource(index)}
+                className="text-red-500 hover:text-red-700 text-sm"
+              >
+                حذف
+              </button>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -740,7 +946,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
                 </label>
                 <input
                   type="date"
-                  value={source.referralDate || ''}
+                  value={source.referralDate || new Date().toISOString().split('T')[0]}
                   onChange={(e) => handleReferralSourceChange(index, 'referralDate', e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border"
                   style={{ 
@@ -951,6 +1157,27 @@ export default function PatientModal({ patient, onClose, onSave }) {
           )}
         </div>
 
+        {/* مؤشر كتلة الجسم */}
+        <div>
+          <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
+            مؤشر كتلة الجسم (BMI)
+          </label>
+          <input
+            type="text"
+            name="bmi"
+            value={formData.bmi}
+            readOnly
+            className="w-full px-4 py-3 rounded-lg border-2 bg-gray-100"
+            style={{ 
+              borderColor: colors.border,
+              color: colors.text
+            }}
+            placeholder="سيتم حسابها تلقائياً"
+            disabled
+          />
+          <p className="text-xs text-gray-500 mt-1">يتم حساب BMI تلقائياً بناءً على الوزن والطول</p>
+        </div>
+
         {/* فصيلة الدم */}
         <div>
           <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
@@ -978,6 +1205,48 @@ export default function PatientModal({ patient, onClose, onSave }) {
             <option value="O+">O+</option>
             <option value="O-">O-</option>
           </select>
+        </div>
+
+        {/* آخر زيارة طبيب */}
+        <div>
+          <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
+            آخر زيارة طبيب
+          </label>
+          <input
+            type="date"
+            name="lastDoctorVisit"
+            value={formData.lastDoctorVisit}
+            onChange={handleChange}
+            max={new Date().toISOString().split('T')[0]}
+            className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+            style={{ 
+              borderColor: colors.border,
+              backgroundColor: colors.background,
+              color: colors.text
+            }}
+            disabled={isSubmitting}
+          />
+        </div>
+
+        {/* آخر فحص */}
+        <div>
+          <label className="block text-sm font-semibold mb-2" style={{ color: colors.text }}>
+            تاريخ آخر فحص
+          </label>
+          <input
+            type="date"
+            name="lastTestDate"
+            value={formData.lastTestDate}
+            onChange={handleChange}
+            max={new Date().toISOString().split('T')[0]}
+            className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+            style={{ 
+              borderColor: colors.border,
+              backgroundColor: colors.background,
+              color: colors.text
+            }}
+            disabled={isSubmitting}
+          />
         </div>
       </div>
 
@@ -1050,7 +1319,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
                     </label>
                     <input
                       type="date"
-                      value={disease.diagnosisDate || ''}
+                      value={disease.diagnosisDate || new Date().toISOString().split('T')[0]}
                       onChange={(e) => handleChronicDiseaseChange(index, 'diagnosisDate', e.target.value)}
                       className="w-full px-3 py-2 rounded-lg border"
                       style={{ 
@@ -1231,7 +1500,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2">
               <input
-                type="radio"
+                type="checkbox"
                 name="insurance.isActive"
                 checked={formData.insurance.isActive === true}
                 onChange={() => setFormData(prev => ({
@@ -1244,7 +1513,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
             </label>
             <label className="flex items-center gap-2">
               <input
-                type="radio"
+                type="checkbox"
                 name="insurance.isActive"
                 checked={formData.insurance.isActive === false}
                 onChange={() => setFormData(prev => ({
@@ -1353,7 +1622,7 @@ export default function PatientModal({ patient, onClose, onSave }) {
                   </label>
                   <input
                     type="date"
-                    value={test.testDate || ''}
+                    value={test.testDate || new Date().toISOString().split('T')[0]}
                     onChange={(e) => handleTestResultChange(index, 'testDate', e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border"
                     style={{ 
@@ -1551,22 +1820,24 @@ export default function PatientModal({ patient, onClose, onSave }) {
 
             {/* Sections Navigation */}
             <div className="flex space-x-2 mt-4 overflow-x-auto">
-              {['demographic', 'registration', 'medical', 'insurance', 'tests', 'additional'].map((section) => (
+              {[
+                { id: 'demographic', label: 'البيانات الديموغرافية' },
+                { id: 'registration', label: 'معلومات التسجيل' },
+                { id: 'medical', label: 'البيانات الطبية' },
+                { id: 'insurance', label: 'بيانات التأمين' },
+                { id: 'tests', label: 'الفحوصات' },
+                { id: 'additional', label: 'إضافية' }
+              ].map((section) => (
                 <button
-                  key={section}
-                  onClick={() => setActiveSection(section)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${activeSection === section ? '' : 'hover:opacity-80'}`}
+                  key={section.id}
+                  onClick={() => setActiveSection(section.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${activeSection === section.id ? '' : 'hover:opacity-80'}`}
                   style={{
-                    backgroundColor: activeSection === section ? colors.primary : colors.surfaceLight,
-                    color: activeSection === section ? '#FFFFFF' : colors.textLight
+                    backgroundColor: activeSection === section.id ? colors.primary : colors.surfaceLight,
+                    color: activeSection === section.id ? '#FFFFFF' : colors.textLight
                   }}
                 >
-                  {section === 'demographic' && 'البيانات الديموغرافية'}
-                  {section === 'registration' && 'معلومات التسجيل'}
-                  {section === 'medical' && 'البيانات الطبية'}
-                  {section === 'insurance' && 'بيانات التأمين'}
-                  {section === 'tests' && 'الفحوصات'}
-                  {section === 'additional' && 'إضافية'}
+                  {section.label}
                 </button>
               ))}
             </div>
