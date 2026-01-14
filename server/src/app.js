@@ -20,7 +20,7 @@ const app = express();
 
 // CORS yapılandırması
 app.use(cors({
-  origin: ['https://alsawaf.vercel.app', 'http://localhost:3000'],
+  origin: ['https://alsawaf.vercel.app'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key', 'X-Requested-With']
