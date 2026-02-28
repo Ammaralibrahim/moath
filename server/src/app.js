@@ -15,21 +15,13 @@ const reportRoutes = require("./routes/reports");
 
 const app = express();
 
-// CORS yapılandırması
-const allowed = ['https://alsawaf.vercel.app', 'http://localhost:3000'];
-app.use(cors({
-  origin: function(origin, cb) {
-    if (!origin) return cb(null, true);
-    if (allowed.indexOf(origin) !== -1) return cb(null, true);
-    return cb(new Error('CORS not allowed'), false);
-  },
-  credentials: true,
-  methods: ['GET','POST','PUT','DELETE','OPTIONS','PATCH'],
-  allowedHeaders: ['Content-Type','Authorization','x-requested-with','x-admin-key']
-}));
-
-// OPTIONS isteklerini handle et
-app.options('*', cors());
+// Basit CORS yapılandırması - sadece https://alsawaf.vercel.app izin verilir
+app.use(
+  cors({
+    origin: "https://alsawaf.vercel.app",
+    credentials: true, // çerez / authorization header'ları için
+  })
+);
 
 // Body parser middleware
 app.use(express.json({ limit: "50mb" }));
@@ -43,7 +35,7 @@ app.use("/api/backup", authMiddleware, backupRoutes);
 app.use("/api/reports", authMiddleware, reportRoutes);
 app.use("/api/system", authMiddleware, systemRoutes);
 app.use("/api/health", systemRoutes);
-app.use("/api/availability", availabilityRoutes); 
+app.use("/api/availability", availabilityRoutes);
 
 // Hata yönetimi middleware'i
 app.use(errorHandler);
