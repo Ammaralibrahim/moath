@@ -15,11 +15,10 @@ const reportRoutes = require("./routes/reports");
 
 const app = express();
 
-// Basit CORS yapılandırması - sadece https://alsawaf.vercel.app izin verilir
 app.use(
   cors({
-    origin: "https://alsawaf.vercel.app",
-    credentials: true, // çerez / authorization header'ları için
+    origin: ["https://alsawafclient.vercel.app", "http://localhost:3000"],
+    credentials: true,
   })
 );
 
